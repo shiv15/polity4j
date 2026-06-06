@@ -78,8 +78,9 @@ public final class RetryConfig {
         }
 
         public Builder multiplier(double multiplier) {
-            if (multiplier < 1.0) throw new IllegalArgumentException(
-                "multiplier must be at least 1.0");
+            if (!Double.isFinite(multiplier) || multiplier < 1.0) {
+                throw new IllegalArgumentException("multiplier must be a finite number at least 1.0");
+            }
             this.multiplier = multiplier;
             return this;
         }

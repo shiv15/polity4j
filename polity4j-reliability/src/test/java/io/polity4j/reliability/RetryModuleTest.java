@@ -71,6 +71,15 @@ class RetryModuleTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> RetryConfig.builder().multiplier(0.9))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> RetryConfig.builder().multiplier(Double.NaN))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("multiplier must be a finite number at least 1.0");
+        assertThatThrownBy(() -> RetryConfig.builder().multiplier(Double.POSITIVE_INFINITY))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("multiplier must be a finite number at least 1.0");
+        assertThatThrownBy(() -> RetryConfig.builder().multiplier(Double.NEGATIVE_INFINITY))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("multiplier must be a finite number at least 1.0");
         assertThatThrownBy(() -> RetryConfig.builder().initialDelay(null))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("initialDelay must not be null");

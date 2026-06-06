@@ -63,6 +63,17 @@ class RetryModuleTest {
         var config = RetryConfig.builder().maxAttempts(4).build();
         var configModule = new RetryModule(config);
         assertThat(configModule.name()).isEqualTo("retry");
+
+        // Test null validations
+        assertThatThrownBy(() -> new RetryModule((RetryConfig) null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("config must not be null");
+        assertThatThrownBy(() -> new RetryModule(null, NO_SLEEP))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("config must not be null");
+        assertThatThrownBy(() -> new RetryModule(config, null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("sleeper must not be null");
     }
 
     @Test
@@ -275,5 +286,16 @@ class RetryModuleTest {
         assertThatThrownBy(() -> module.process(REQUEST, chain))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Retry sleep interrupted");
+    }
+
+    @Test
+    void testProcessNullValidation() {
+        var module = new RetryModule();
+        assertThatThrownBy(() -> module.process(null, request -> okResponse()))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("request must not be null");
+        assertThatThrownBy(() -> module.process(REQUEST, null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("next must not be null");
     }
 }

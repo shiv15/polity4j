@@ -10,6 +10,7 @@ import io.polity4j.core.exception.OverloadedException;
 import io.polity4j.core.exception.RateLimitException;
 
 import java.time.Duration;
+import java.util.Objects;
 
 /**
  * Retries failed AI calls with exponential backoff.
@@ -42,7 +43,7 @@ public final class RetryModule implements PipelineModule {
     }
 
     public RetryModule(RetryConfig config) {
-        this(config, Thread::sleep);
+        this(Objects.requireNonNull(config, "config must not be null"), Thread::sleep);
     }
 
     /**
@@ -50,8 +51,8 @@ public final class RetryModule implements PipelineModule {
      * tests don't actually wait for real delays.
      */
     RetryModule(RetryConfig config, Sleeper sleeper) {
-        this.config = config;
-        this.sleeper = sleeper;
+        this.config = java.util.Objects.requireNonNull(config, "config must not be null");
+        this.sleeper = java.util.Objects.requireNonNull(sleeper, "sleeper must not be null");
     }
 
     RetryModule(int maxAttempts, Sleeper sleeper) {
@@ -60,6 +61,8 @@ public final class RetryModule implements PipelineModule {
 
     @Override
     public LlmResponse process(LlmRequest request, PipelineChain next) throws PolityException {
+        Objects.requireNonNull(request, "request must not be null");
+        Objects.requireNonNull(next, "next must not be null");
         PolityException lastException = null;
 
         for (int attempt = 1; attempt <= config.maxAttempts(); attempt++) {

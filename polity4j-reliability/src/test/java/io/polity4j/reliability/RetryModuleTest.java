@@ -72,9 +72,17 @@ class RetryModuleTest {
         assertThatThrownBy(() -> RetryConfig.builder().multiplier(0.9))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> RetryConfig.builder().initialDelay(null))
-                .isInstanceOf(NullPointerException.class);
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("initialDelay must not be null");
         assertThatThrownBy(() -> RetryConfig.builder().maxDelay(null))
-                .isInstanceOf(NullPointerException.class);
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("maxDelay must not be null");
+        assertThatThrownBy(() -> RetryConfig.builder().initialDelay(Duration.ofMillis(-100)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("initialDelay must not be negative");
+        assertThatThrownBy(() -> RetryConfig.builder().maxDelay(Duration.ofMillis(-5000)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("maxDelay must not be negative");
     }
 
     @Test

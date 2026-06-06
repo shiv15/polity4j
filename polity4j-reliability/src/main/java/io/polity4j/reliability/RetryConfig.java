@@ -60,12 +60,20 @@ public final class RetryConfig {
         }
 
         public Builder initialDelay(Duration initialDelay) {
-            this.initialDelay = Objects.requireNonNull(initialDelay);
+            Objects.requireNonNull(initialDelay, "initialDelay must not be null");
+            if (initialDelay.isNegative()) {
+                throw new IllegalArgumentException("initialDelay must not be negative");
+            }
+            this.initialDelay = initialDelay;
             return this;
         }
 
         public Builder maxDelay(Duration maxDelay) {
-            this.maxDelay = Objects.requireNonNull(maxDelay);
+            Objects.requireNonNull(maxDelay, "maxDelay must not be null");
+            if (maxDelay.isNegative()) {
+                throw new IllegalArgumentException("maxDelay must not be negative");
+            }
+            this.maxDelay = maxDelay;
             return this;
         }
 

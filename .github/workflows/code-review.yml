@@ -32,4 +32,4 @@ jobs:
           # Fetch the target branch so git diff can compare against it
           git fetch origin ${{ github.base_ref }}:${{ github.base_ref }}
           # Run the review script
-          node review_branch.js
+          node .github/scripts/review_branch.js

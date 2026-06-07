@@ -12,6 +12,7 @@
     <modules>
         <module>polity4j-core</module>
         <module>polity4j-reliability</module>
+        <module>polity4j-examples</module>
     </modules>
 
     <properties>

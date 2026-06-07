@@ -122,4 +122,4 @@ To run the live reliability demo using the Anthropic API:
 
 ## License
 
-Polity4j is licensed under the [MIT License](./LICENSE).
+Polity4j is licensed under the [Apache License, Version 2.0](./LICENSE).

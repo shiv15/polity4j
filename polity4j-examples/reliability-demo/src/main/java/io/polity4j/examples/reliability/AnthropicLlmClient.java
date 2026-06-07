@@ -40,6 +40,10 @@ public final class AnthropicLlmClient implements LlmClient {
     }
 
     public AnthropicLlmClient(String apiKey, String modelOverride) {
+        java.util.Objects.requireNonNull(apiKey, "apiKey must not be null");
+        if (apiKey.isBlank()) {
+            throw new IllegalArgumentException("apiKey must not be blank");
+        }
         this.apiKey = apiKey;
         this.modelOverride = modelOverride;
         this.httpClient = HttpClient.newBuilder()
@@ -49,6 +53,11 @@ public final class AnthropicLlmClient implements LlmClient {
 
     @Override
     public LlmResponse call(LlmRequest request) throws PolityException {
+        java.util.Objects.requireNonNull(request, "request must not be null");
+        if (request.maxTokens() <= 0) {
+            throw new IllegalArgumentException("maxTokens must be positive");
+        }
+
         // Apply model override if present, otherwise use the request's model
         String modelToUse = (modelOverride != null) ? modelOverride : request.model();
 
@@ -79,6 +88,7 @@ public final class AnthropicLlmClient implements LlmClient {
         return switch (httpResponse.statusCode()) {
             case 200 -> parseSuccess(httpResponse.body(), modelToUse, latencyMs);
             case 429 -> throw new RateLimitException(provider(), parseRetryAfter(httpResponse));
+            // Anthropic uses status code 529 specifically to indicate that the service is overloaded.
             case 529 -> throw new OverloadedException(provider());
             case 503, 500 -> throw new ModelUnavailableException(modelToUse, provider());
             default -> throw new ModelUnavailableException(

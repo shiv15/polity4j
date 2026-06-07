@@ -38,8 +38,9 @@ try {
     "1. Nullability/Validation checks (e.g. check for negative and null values in config builders).\n" +
     "2. Boundary/Edge cases or performance issues (e.g. infinite or NaN double values, thread-blocking sleeps).\n" +
     "3. Incorrect exception handling (make sure PolityException is thrown, not LlmException).\n" +
-    "Be concise, constructive, and output markdown. Flag if there are any CRITICAL issues " +
-    "that must block the PR.";
+    "Be concise, constructive, and output markdown. At the very end of your review, you MUST " +
+    "output either 'DECISION: BLOCK' (if there are critical issues blocking the PR) or " +
+    "'DECISION: PASS' (if the changes are approved to merge).";
 
   const prompt = `Here is the code diff:\n\n\`\`\`diff\n${diff}\n\`\`\`\n\n` +
                  `Here are the maven test results:\n\n\`\`\`text\n${testResults}\n\`\`\`\n\n` +
@@ -70,7 +71,7 @@ try {
     console.log("\n=== AGENT CODE REVIEW REPORT ===\n");
     console.log(report);
 
-    if (report.toUpperCase().includes("CRITICAL") || report.toUpperCase().includes("BLOCK")) {
+    if (report.includes("DECISION: BLOCK")) {
       console.log("\n[BLOCKED] Agent flagged critical issues in the code.");
       process.exit(1);
     } else {

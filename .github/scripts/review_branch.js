@@ -4,7 +4,7 @@ const { execSync } = require('child_process');
 const apiKey = process.env.GEMINI_API_KEY;
 if (!apiKey) {
   console.log("Warning: GEMINI_API_KEY is not set. Skipping automated code review.");
-  process.exit(0);
+  process.exit(process.env.GITHUB_ACTIONS ? 1 : 0);
 }
 
 try {
@@ -65,7 +65,7 @@ try {
     const report = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!report) {
       console.error("Error: Failed to get response from Gemini API. Response received:", JSON.stringify(data));
-      process.exit(0);
+      process.exit(1);
     }
 
     console.log("\n=== AGENT CODE REVIEW REPORT ===\n");
@@ -81,10 +81,10 @@ try {
   })
   .catch(err => {
     console.error("Error calling Gemini API:", err);
-    process.exit(0);
+    process.exit(1);
   });
 
 } catch (err) {
   console.error("Error executing review agent:", err);
-  process.exit(0);
+  process.exit(1);
 }

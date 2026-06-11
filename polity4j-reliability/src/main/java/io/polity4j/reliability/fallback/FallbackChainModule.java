@@ -41,6 +41,23 @@ public final class FallbackChainModule implements PipelineModule {
             throw new IllegalArgumentException(
                     "fallbacks must not be empty — use at least one fallback client");
         }
+
+        java.util.Set<LlmClient> seenClients = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        java.util.Set<String> seenProviders = new java.util.HashSet<>();
+
+        for (LlmClient fallback : fallbacks) {
+            Objects.requireNonNull(fallback, "fallback client must not be null");
+            if (!seenClients.add(fallback)) {
+                throw new IllegalArgumentException("Duplicate fallback client detected in the chain");
+            }
+            String provider = fallback.provider();
+            if (provider != null && !provider.isBlank()) {
+                if (!seenProviders.add(provider)) {
+                    throw new IllegalArgumentException("Duplicate provider '" + provider + "' detected in the fallback chain");
+                }
+            }
+        }
+
         this.fallbacks = List.copyOf(fallbacks);
     }
 

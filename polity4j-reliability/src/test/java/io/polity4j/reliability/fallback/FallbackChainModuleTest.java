@@ -161,6 +161,23 @@ class FallbackChainModuleTest {
     }
 
     @Test
+    void rejectsDuplicateFallbackClients() {
+        var client = successClient("anthropic");
+        assertThatThrownBy(() -> new FallbackChainModule(List.of(client, client)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Duplicate fallback client detected in the chain");
+    }
+
+    @Test
+    void rejectsDuplicateProvidersInFallbackChain() {
+        var client1 = successClient("openai");
+        var client2 = successClient("openai");
+        assertThatThrownBy(() -> new FallbackChainModule(List.of(client1, client2)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Duplicate provider 'openai' detected in the fallback chain");
+    }
+
+    @Test
     void nameIsCorrect() {
         var module = new FallbackChainModule(List.of(successClient("anthropic")));
         assertThat(module.name()).isEqualTo("fallback-chain");

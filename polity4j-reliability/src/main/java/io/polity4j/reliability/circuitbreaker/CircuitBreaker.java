@@ -3,11 +3,12 @@ package io.polity4j.reliability.circuitbreaker;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Thread-safe circuit breaker state machine for one provider.
+ * Uses a single atomic reference to an immutable snapshot record to ensure
+ * atomic transitions of all state attributes as a single unit.
  *
  * State transitions:
  *
@@ -22,11 +23,18 @@ public final class CircuitBreaker {
     private final CircuitBreakerConfig config;
     private final Clock clock;
 
-    private final AtomicInteger failureCount = new AtomicInteger(0);
-    private final AtomicInteger probeSuccessCount = new AtomicInteger(0);
-    private final AtomicReference<CircuitState> state =
-            new AtomicReference<>(CircuitState.CLOSED);
-    private volatile Instant openedAt = null;
+    private final AtomicReference<CircuitSnapshot> snapshot;
+
+    private record CircuitSnapshot(
+            CircuitState state,
+            int failureCount,
+            int probeSuccessCount,
+            Instant openedAt
+    ) {
+        CircuitSnapshot {
+            Objects.requireNonNull(state, "state must not be null");
+        }
+    }
 
     public CircuitBreaker(String provider, CircuitBreakerConfig config) {
         this(provider, config, Clock.systemUTC());
@@ -37,6 +45,7 @@ public final class CircuitBreaker {
         this.provider = Objects.requireNonNull(provider, "provider must not be null");
         this.config = Objects.requireNonNull(config, "config must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.snapshot = new AtomicReference<>(new CircuitSnapshot(CircuitState.CLOSED, 0, 0, null));
     }
 
     /**
@@ -46,19 +55,32 @@ public final class CircuitBreaker {
      * HALF_OPEN — allowed for probe calls only.
      */
     public boolean allowCall() {
-        return switch (state.get()) {
-            case CLOSED -> true;
-            case OPEN -> {
-                if (cooldownElapsed()) {
-                    if (state.compareAndSet(CircuitState.OPEN, CircuitState.HALF_OPEN)) {
-                        probeSuccessCount.set(0);
-                    }
-                    yield true;
+        while (true) {
+            CircuitSnapshot current = snapshot.get();
+            switch (current.state()) {
+                case CLOSED -> {
+                    return true;
                 }
-                yield false;
+                case OPEN -> {
+                    if (cooldownElapsed(current)) {
+                        CircuitSnapshot next = new CircuitSnapshot(
+                                CircuitState.HALF_OPEN,
+                                0,
+                                0,
+                                null
+                        );
+                        if (snapshot.compareAndSet(current, next)) {
+                            return true;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+                case HALF_OPEN -> {
+                    return true;
+                }
             }
-            case HALF_OPEN -> true;
-        };
+        }
     }
 
     /**
@@ -67,17 +89,34 @@ public final class CircuitBreaker {
      * In CLOSED, reset the failure count.
      */
     public void recordSuccess() {
-        switch (state.get()) {
-            case HALF_OPEN -> {
-                if (probeSuccessCount.incrementAndGet()
-                        >= config.successesRequiredToClose()) {
-                    state.set(CircuitState.CLOSED);
-                    failureCount.set(0);
-                    probeSuccessCount.set(0);
+        while (true) {
+            CircuitSnapshot current = snapshot.get();
+            switch (current.state()) {
+                case HALF_OPEN -> {
+                    int nextSuccessCount = current.probeSuccessCount() + 1;
+                    CircuitSnapshot next;
+                    if (nextSuccessCount >= config.successesRequiredToClose()) {
+                        next = new CircuitSnapshot(CircuitState.CLOSED, 0, 0, null);
+                    } else {
+                        next = new CircuitSnapshot(CircuitState.HALF_OPEN, 0, nextSuccessCount, null);
+                    }
+                    if (snapshot.compareAndSet(current, next)) {
+                        return;
+                    }
+                }
+                case CLOSED -> {
+                    if (current.failureCount() == 0) {
+                        return;
+                    }
+                    CircuitSnapshot next = new CircuitSnapshot(CircuitState.CLOSED, 0, 0, null);
+                    if (snapshot.compareAndSet(current, next)) {
+                        return;
+                    }
+                }
+                case OPEN -> {
+                    return; // Ignore
                 }
             }
-            case CLOSED -> failureCount.set(0);
-            case OPEN -> {} // success during open shouldn't happen — ignore
         }
     }
 
@@ -87,31 +126,54 @@ public final class CircuitBreaker {
      * In HALF_OPEN, a single failure reopens the circuit immediately.
      */
     public void recordFailure() {
-        switch (state.get()) {
-            case CLOSED -> {
-                if (failureCount.incrementAndGet() >= config.failureThreshold()) {
-                    openedAt = clock.instant();
-                    if (state.compareAndSet(CircuitState.CLOSED, CircuitState.OPEN)) {
-                        System.err.printf("WARNING: Circuit breaker for provider '%s' has tripped OPEN. Downstream calls will be blocked.%n", provider);
+        while (true) {
+            CircuitSnapshot current = snapshot.get();
+            switch (current.state()) {
+                case CLOSED -> {
+                    int nextFailureCount = current.failureCount() + 1;
+                    CircuitSnapshot next;
+                    if (nextFailureCount >= config.failureThreshold()) {
+                        Instant now = clock.instant();
+                        next = new CircuitSnapshot(CircuitState.OPEN, nextFailureCount, 0, now);
+                    } else {
+                        next = new CircuitSnapshot(CircuitState.CLOSED, nextFailureCount, 0, null);
+                    }
+                    if (snapshot.compareAndSet(current, next)) {
+                        if (next.state() == CircuitState.OPEN) {
+                            System.err.printf("WARNING: Circuit breaker for provider '%s' has tripped OPEN. Downstream calls will be blocked.%n", provider);
+                        }
+                        return;
                     }
                 }
-            }
-            case HALF_OPEN -> {
-                openedAt = clock.instant();
-                if (state.compareAndSet(CircuitState.HALF_OPEN, CircuitState.OPEN)) {
-                    System.err.printf("WARNING: Circuit breaker for provider '%s' has tripped OPEN. Downstream calls will be blocked.%n", provider);
+                case HALF_OPEN -> {
+                    Instant now = clock.instant();
+                    CircuitSnapshot next = new CircuitSnapshot(CircuitState.OPEN, 0, 0, now);
+                    if (snapshot.compareAndSet(current, next)) {
+                        System.err.printf("WARNING: Circuit breaker for provider '%s' has tripped OPEN. Downstream calls will be blocked.%n", provider);
+                        return;
+                    }
+                }
+                case OPEN -> {
+                    return; // Already open
                 }
             }
-            case OPEN -> {} // already open — nothing to do
         }
     }
 
-    public CircuitState state() { return state.get(); }
-    public int failureCount() { return failureCount.get(); }
-    public String provider() { return provider; }
+    public CircuitState state() {
+        return snapshot.get().state();
+    }
 
-    private boolean cooldownElapsed() {
-        return openedAt != null && clock.instant()
-                .isAfter(openedAt.plus(config.cooldownDuration()));
+    public int failureCount() {
+        return snapshot.get().failureCount();
+    }
+
+    public String provider() {
+        return provider;
+    }
+
+    private boolean cooldownElapsed(CircuitSnapshot snap) {
+        return snap.openedAt() != null && clock.instant()
+                .isAfter(snap.openedAt().plus(config.cooldownDuration()));
     }
 }

@@ -78,6 +78,7 @@ const fetchWithRetry = async (url, options, maxAttempts = 3, initialDelayMs = 20
       "1. Nullability/Validation checks (e.g. check for negative and null values in config builders).\n" +
       "2. Boundary/Edge cases or performance issues (e.g. infinite or NaN double values, thread-blocking sleeps).\n" +
       "3. Incorrect exception handling (make sure PolityException is thrown, not LlmException).\n" +
+      "4. Thread Safety (e.g. review state machines for non-atomic compound operations on atomic variables, race conditions, unchecked volatile reads/writes, or unprotected shared mutable state).\n" +
       "Be concise, constructive, and output markdown. At the very end of your review, you MUST " +
       "output either 'DECISION: BLOCK' (if there are critical issues blocking the PR) or " +
       "'DECISION: PASS' (if the changes are approved to merge).";

@@ -13,6 +13,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class BudgetGuardrailModuleTest {
 
     @Test
+    void constructorThrowsNullPointerExceptionIfConfigIsNull() {
+        assertThatThrownBy(() -> new BudgetGuardrailModule(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("config must not be null");
+    }
+
+    @Test
     void callLevelCeilingBlocksExpensiveRequestPostFacto() {
         BudgetConfig config = new BudgetConfig(new BigDecimal("0.50"), null, null);
         BudgetGuardrailModule module = new BudgetGuardrailModule(config);

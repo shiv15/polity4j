@@ -19,7 +19,7 @@ public class BudgetGuardrailModule implements PipelineModule {
     private final Map<String, SpendTracker> callers = new ConcurrentHashMap<>();
     
     public BudgetGuardrailModule(BudgetConfig config, BudgetEventListener listener) {
-        this.config = config;
+        this.config = java.util.Objects.requireNonNull(config, "config must not be null");
         this.listener = listener;
     }
     

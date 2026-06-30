@@ -8,6 +8,7 @@ import io.polity4j.core.exception.BudgetExceededException;
 
 import java.math.BigDecimal;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class BudgetGuardrailModule implements PipelineModule {
@@ -19,7 +20,7 @@ public class BudgetGuardrailModule implements PipelineModule {
     private final Map<String, SpendTracker> callers = new ConcurrentHashMap<>();
     
     public BudgetGuardrailModule(BudgetConfig config, BudgetEventListener listener) {
-        this.config = java.util.Objects.requireNonNull(config, "config must not be null");
+        this.config = Objects.requireNonNull(config, "config must not be null");
         this.listener = listener;
     }
     

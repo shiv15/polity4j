@@ -13,6 +13,7 @@
         <module>polity4j-core</module>
         <module>polity4j-reliability</module>
         <module>polity4j-cost</module>
+        <module>polity4j-quality</module>
         <module>polity4j-examples</module>
     </modules>
 

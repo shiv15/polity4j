@@ -22,6 +22,8 @@ Polity4j is organized as a multi-module Maven project:
 
 - **[`polity4j-core`](./polity4j-core)**: Core pipelines, request/response models, interfaces, and the exception hierarchy.
 - **[`polity4j-reliability`](./polity4j-reliability)**: Pluggable reliability modules: `RetryModule`, `CircuitBreakerModule`, and `FallbackChainModule`.
+- **[`polity4j-cost`](./polity4j-cost)**: Pluggable cost control modules: `BudgetGuardrailModule`, `ExactCacheModule`, and `ModelRouterModule`.
+- **[`polity4j-quality`](./polity4j-quality)**: Pluggable prompt optimization and quality assurance modules: `PromptOptimizerModule`.
 - **[`polity4j-examples`](./polity4j-examples)**: A real-world example pipeline using a custom Java `HttpClient` adapter communicating with the Anthropic Messages API.
 
 ---
@@ -39,6 +41,16 @@ Add the parent project or individual dependencies to your `pom.xml`:
 <dependency>
   <groupId>io.polity4j</groupId>
   <artifactId>polity4j-reliability</artifactId>
+  <version>1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+  <groupId>io.polity4j</groupId>
+  <artifactId>polity4j-cost</artifactId>
+  <version>1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+  <groupId>io.polity4j</groupId>
+  <artifactId>polity4j-quality</artifactId>
   <version>1.0-SNAPSHOT</version>
 </dependency>
 ```

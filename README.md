@@ -1,36 +1,54 @@
 # Polity4j
 
-Polity4j is a lightweight, zero-dependency reliability orchestration framework for LLM integrations in Java 17+.
+[![Java Version](https://img.shields.io/badge/Java-17%2B-blue.svg)](https://img.shields.io/badge/Java-17%2B-blue.svg)
+[![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](./LICENSE)
+[![Build Status](https://img.shields.io/badge/Build-passing-brightgreen.svg)](#)
 
-Polity4j decouples your LLM logic from reliability concerns (retry, backoff, rate limit handling, circuit breaking, fallback routing) using a pluggable, modular pipeline. It allows you to build resilient, fault-tolerant AI features using any HTTP client or SDK.
+Polity4j is a featherweight, **zero-dependency** reliability, cost, and quality orchestration framework for LLM integrations in Java 17+.
+
+Unlike heavy frameworks (e.g. LangChain4j), Polity4j decouples your LLM business logic from operational concerns using a highly customizable, pluggable pipeline. It integrates with any HTTP client or SDK.
+
+```mermaid
+graph LR
+    Req[LlmRequest] --> Q[Quality: PromptOptimizer]
+    Q --> C_Route[Cost: ModelRouter]
+    C_Route --> C_Cache[Cost: ExactCache]
+    C_Cache --> R_Retry[Reliability: Retry]
+    R_Retry --> R_CB[Reliability: CircuitBreaker]
+    R_CB --> C_Budget[Cost: BudgetGuardrail]
+    C_Budget --> Client[LlmClient / LLM Provider]
+```
 
 ---
 
 ## Key Features
 
-- 🔌 **Zero SDK lock-in**: Bring your own HTTP client or LLM SDK; adapt it easily by implementing the `LlmClient` interface.
-- 🔁 **Resilient Retries**: Retry transient blips (like rate limits or brief provider failures) with customizable exponential backoff.
-- 🛡️ **Circuit Breaking**: Fail fast during sustained outages to prevent cascade failure and avoid wasting rate limit budgets.
-- 🔀 **Fallback Chains**: Route requests seamlessly to alternative models or providers (e.g., fallback from Claude to OpenAI or Ollama) when the primary client fails.
-- 🔒 **Sealed Exception Hierarchy**: Domain exceptions (`PolityException`) map cleanly to standardized HTTP error behaviors.
+- 🔌 **Zero SDK Lock-In**: Bring your own HTTP client or LLM SDK.
+- 🔁 **Resilient Retries**: Automatic backoff handling for rate limits and server errors.
+- 🛡️ **Circuit Breaking**: Fast-fail sustained provider outages to save resources.
+- 🔀 **Fallback Chains**: Failover to secondary models/providers when primary fails.
+- 💰 **Budget Guardrails**: Set hard cumulative spend ceilings at call, caller, and org levels.
+- ⚡ **Exact Cache**: Short-circuit identical calls using SHA-256 keying.
+- 🤖 **Model Routing**: Route prompts dynamically to cheaper models based on text complexity.
+- 📝 **Prompt Optimizer**: Clean prompts, deduplicate history, and prevent context overflow.
 
 ---
 
 ## Project Structure
 
-Polity4j is organized as a multi-module Maven project:
+Polity4j is organized as a modular, lightweight project:
 
-- **[`polity4j-core`](./polity4j-core)**: Core pipelines, request/response models, interfaces, and the exception hierarchy.
-- **[`polity4j-reliability`](./polity4j-reliability)**: Pluggable reliability modules: `RetryModule`, `CircuitBreakerModule`, and `FallbackChainModule`.
-- **[`polity4j-cost`](./polity4j-cost)**: Pluggable cost control modules: `BudgetGuardrailModule`, `ExactCacheModule`, and `ModelRouterModule`.
-- **[`polity4j-quality`](./polity4j-quality)**: Pluggable prompt optimization and quality assurance modules: `PromptOptimizerModule`.
-- **[`polity4j-examples`](./polity4j-examples)**: A real-world example pipeline using a custom Java `HttpClient` adapter communicating with the Anthropic Messages API.
+- **[`polity4j-core`](./polity4j-core)**: Core pipelines, request/response models, and custom exceptions.
+- **[`polity4j-reliability`](./polity4j-reliability)**: Pluggable resiliency: `RetryModule`, `CircuitBreakerModule`, and `FallbackChainModule`.
+- **[`polity4j-cost`](./polity4j-cost)**: Cost optimization: `BudgetGuardrailModule`, `ExactCacheModule`, and `ModelRouterModule`.
+- **[`polity4j-quality`](./polity4j-quality)**: Quality control: `PromptOptimizerModule`.
+- **[`polity4j-examples`](./polity4j-examples)**: Executable reliability pipeline demo.
 
 ---
 
 ## Installation
 
-Add the parent project or individual dependencies to your `pom.xml`:
+Add dependencies to your `pom.xml`:
 
 ```xml
 <dependency>
@@ -60,49 +78,57 @@ Add the parent project or individual dependencies to your `pom.xml`:
 ## Quick Start
 
 ### 1. Implement `LlmClient`
-Adapt any client or SDK to the pipeline:
+Adapt any provider client:
 
 ```java
 public class MyCustomClient implements LlmClient {
     @Override
     public LlmResponse call(LlmRequest request) throws PolityException {
-        // execute raw HTTP call or SDK invocation
-        // map client errors to PolityException (e.g. RateLimitException, ModelUnavailableException)
+        // Execute raw HTTP or SDK call
         return LlmResponse.builder("response content", request.model(), provider()).build();
     }
 
     @Override
-    public String provider() {
-        return "custom-provider";
-    }
+    public String provider() { return "custom-provider"; }
 }
 ```
 
-### 2. Configure the Pipeline
-Chain the core and reliability modules together:
+### 2. Configure a Production-Grade Pipeline
+Combine quality, cost, and reliability rules:
 
 ```java
 LlmClient primaryClient = new MyCustomClient();
 LlmClient fallbackClient = new AnotherClient();
 
+RoutingPolicy routingPolicy = RoutingPolicy.builder()
+    .threshold(0.5)
+    .cheapModel("claude-3-haiku-20240307")
+    .expensiveModel("claude-3-5-sonnet-20241022")
+    .build();
+
 LlmPipeline pipeline = LlmPipeline.builder(primaryClient)
-    // 1. Retry up to 3 times on transient issues
+    // 1. Quality: Optimize whitespaces and keep latest history
+    .with(new PromptOptimizerModule(PromptOptimizerConfig.DEFAULT))
+    // 2. Cost: Route simple requests to Claude Haiku
+    .with(new ModelRouterModule(routingPolicy))
+    // 3. Cost: Short-circuit identical requests
+    .with(new ExactCacheModule())
+    // 4. Reliability: Retry transient API rate limits
     .with(new RetryModule(RetryConfig.DEFAULT))
-    // 2. Trip open after 5 consecutive failures
+    // 5. Reliability: Block outbound calls if provider remains offline
     .with(new CircuitBreakerModule("primary-provider", CircuitBreakerConfig.DEFAULT))
-    // 3. Roll over to secondary provider if primary fails
+    // 6. Reliability: Failover to secondary client if primary is exhausted
     .with(new FallbackChainModule(List.of(fallbackClient)))
     .build();
 ```
 
 ### 3. Execute Requests
-Send requests through the pipeline:
+Send requests safely:
 
 ```java
 LlmRequest request = LlmRequest.builder(
     "Explain quantum computing in one sentence.", 
-    "gpt-4o")
-    .maxTokens(128)
+    "claude-3-5-sonnet-20241022")
     .build();
 
 try {

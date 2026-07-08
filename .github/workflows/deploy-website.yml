@@ -1,0 +1,35 @@
+name: Deploy Website
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-website.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: 'website/package-lock.json'
+
+      - name: Install Dependencies
+        run: npm ci
+        working-directory: website
+
+      - name: Build Docusaurus Website
+        run: npm run build
+        working-directory: website
+
+      - name: Deploy to Surge
+        run: npx surge build polity4j-docs.surge.sh --token ${{ secrets.SURGE_TOKEN }}
+        working-directory: website

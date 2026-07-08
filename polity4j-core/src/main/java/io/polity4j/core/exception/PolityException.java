@@ -6,7 +6,7 @@ import java.time.Instant;
  * Base custom sealed runtime exception for the Polity library.
  * Defines standard status code and timestamp tracking.
  */
-public abstract sealed class PolityException extends RuntimeException permits ResourceNotFoundException, RateLimitException, OverloadedException, ContextOverflowException, PartialResponseException, BudgetExceededException, ModelUnavailableException, AgentLoopException {
+public abstract sealed class PolityException extends RuntimeException permits ResourceNotFoundException, RateLimitException, OverloadedException, ContextOverflowException, PartialResponseException, BudgetExceededException, ModelUnavailableException, AgentLoopException, ResponseValidationException {
     private final int statusCode;
     private final Instant timestamp;
 

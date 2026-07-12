@@ -42,7 +42,7 @@ Polity4j is organized as a modular, lightweight project:
 - **[`polity4j-core`](./polity4j-core)**: Core pipelines, request/response models, and custom exceptions.
 - **[`polity4j-reliability`](./polity4j-reliability)**: Pluggable resiliency: `RetryModule`, `CircuitBreakerModule`, and `FallbackChainModule`.
 - **[`polity4j-cost`](./polity4j-cost)**: Cost optimization: `BudgetGuardrailModule`, `ExactCacheModule`, and `ModelRouterModule`.
-- **[`polity4j-quality`](./polity4j-quality)**: Quality control: `PromptOptimizerModule` and `ResponseValidatorModule`.
+- **[`polity4j-quality`](./polity4j-quality)**: Quality control: `PromptOptimizerModule`, `ResponseValidatorModule`, and `ContextWindowManagerModule`.
 - **[`polity4j-examples`](./polity4j-examples)**: Executable reliability pipeline demo.
 
 ---

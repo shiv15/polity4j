@@ -14,6 +14,7 @@
         <module>polity4j-reliability</module>
         <module>polity4j-cost</module>
         <module>polity4j-quality</module>
+        <module>polity4j-adapters</module>
         <module>polity4j-examples</module>
     </modules>
 

@@ -10,6 +10,7 @@
     <packaging>pom</packaging>
 
     <modules>
+        <module>polity4j-bom</module>
         <module>polity4j-core</module>
         <module>polity4j-reliability</module>
         <module>polity4j-cost</module>

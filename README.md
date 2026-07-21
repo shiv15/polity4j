@@ -39,39 +39,58 @@ graph LR
 
 Polity4j is organized as a modular, lightweight project:
 
+- **[`polity4j-bom`](./polity4j-bom)**: Bill of Materials POM for centralized dependency management.
 - **[`polity4j-core`](./polity4j-core)**: Core pipelines, request/response models, and custom exceptions.
 - **[`polity4j-reliability`](./polity4j-reliability)**: Pluggable resiliency: `RetryModule`, `CircuitBreakerModule`, and `FallbackChainModule`.
 - **[`polity4j-cost`](./polity4j-cost)**: Cost optimization: `BudgetGuardrailModule`, `ExactCacheModule`, and `ModelRouterModule`.
 - **[`polity4j-quality`](./polity4j-quality)**: Quality control: `PromptOptimizerModule`, `ResponseValidatorModule`, and `ContextWindowManagerModule`.
+- **[`polity4j-adapters`](./polity4j-adapters)**: LLM client adapters for Anthropic, OpenAI, etc.
+- **[`polity4j-integrations`](./polity4j-integrations)**: Framework integrations (Spring Boot 3, Micrometer).
 - **[`polity4j-examples`](./polity4j-examples)**: Executable reliability pipeline demo.
 
 ---
 
 ## Installation
 
-Add dependencies to your `pom.xml`:
+### Using the BOM (Recommended)
+
+Import `polity4j-bom` in your `dependencyManagement` section to manage all module versions:
 
 ```xml
-<dependency>
-  <groupId>io.polity4j</groupId>
-  <artifactId>polity4j-core</artifactId>
-  <version>1.0-SNAPSHOT</version>
-</dependency>
-<dependency>
-  <groupId>io.polity4j</groupId>
-  <artifactId>polity4j-reliability</artifactId>
-  <version>1.0-SNAPSHOT</version>
-</dependency>
-<dependency>
-  <groupId>io.polity4j</groupId>
-  <artifactId>polity4j-cost</artifactId>
-  <version>1.0-SNAPSHOT</version>
-</dependency>
-<dependency>
-  <groupId>io.polity4j</groupId>
-  <artifactId>polity4j-quality</artifactId>
-  <version>1.0-SNAPSHOT</version>
-</dependency>
+<dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>io.polity4j</groupId>
+      <artifactId>polity4j-bom</artifactId>
+      <version>1.0-SNAPSHOT</version>
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+```
+
+Then add the specific modules you need without specifying version tags:
+
+```xml
+<dependencies>
+  <dependency>
+    <groupId>io.polity4j</groupId>
+    <artifactId>polity4j-core</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>io.polity4j</groupId>
+    <artifactId>polity4j-reliability</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>io.polity4j</groupId>
+    <artifactId>polity4j-cost</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>io.polity4j</groupId>
+    <artifactId>polity4j-quality</artifactId>
+  </dependency>
+</dependencies>
 ```
 
 ---

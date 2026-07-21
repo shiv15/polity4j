@@ -18,5 +18,9 @@
 
   <modules>
     <module>reliability-demo</module>
+    <module>cost-demo</module>
+    <module>quality-demo</module>
+    <module>adapters-demo</module>
+    <module>full-pipeline-demo</module>
   </modules>
 </project>

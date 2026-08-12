@@ -2,6 +2,7 @@
 
 [![Java Version](https://img.shields.io/badge/Java-17%2B-blue.svg)](https://img.shields.io/badge/Java-17%2B-blue.svg)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](./LICENSE)
+[![](https://jitpack.io/v/shiv15/polity4j.svg)](https://jitpack.io/#shiv15/polity4j)
 [![Build Status](https://img.shields.io/badge/Build-passing-brightgreen.svg)](#)
 
 Polity4j is a featherweight, **zero-dependency** reliability, cost, and quality orchestration framework for LLM integrations in Java 17+.
@@ -52,17 +53,30 @@ Polity4j is organized as a modular, lightweight project:
 
 ## Installation
 
-### Using the BOM (Recommended)
+### Via JitPack
 
-Import `polity4j-bom` in your `dependencyManagement` section to manage all module versions:
+Add the JitPack repository to your project's `pom.xml`:
+
+```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
+```
+
+#### Using the BOM (Recommended)
+
+Import `polity4j-bom` in your `dependencyManagement` section:
 
 ```xml
 <dependencyManagement>
   <dependencies>
     <dependency>
-      <groupId>io.polity4j</groupId>
+      <groupId>com.github.shiv15.polity4j</groupId>
       <artifactId>polity4j-bom</artifactId>
-      <version>1.0-SNAPSHOT</version>
+      <version>v0.1.0</version> <!-- Replace with desired tag or commit hash -->
       <type>pom</type>
       <scope>import</scope>
     </dependency>
@@ -75,19 +89,19 @@ Then add the specific modules you need without specifying version tags:
 ```xml
 <dependencies>
   <dependency>
-    <groupId>io.polity4j</groupId>
+    <groupId>com.github.shiv15.polity4j</groupId>
     <artifactId>polity4j-core</artifactId>
   </dependency>
   <dependency>
-    <groupId>io.polity4j</groupId>
+    <groupId>com.github.shiv15.polity4j</groupId>
     <artifactId>polity4j-reliability</artifactId>
   </dependency>
   <dependency>
-    <groupId>io.polity4j</groupId>
+    <groupId>com.github.shiv15.polity4j</groupId>
     <artifactId>polity4j-cost</artifactId>
   </dependency>
   <dependency>
-    <groupId>io.polity4j</groupId>
+    <groupId>com.github.shiv15.polity4j</groupId>
     <artifactId>polity4j-quality</artifactId>
   </dependency>
 </dependencies>

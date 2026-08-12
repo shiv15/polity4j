@@ -1,6 +1,8 @@
 package io.polity4j.core;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -15,7 +17,12 @@ public record LlmRequest(
         int maxTokens,
         String callerId,
         String regionContext,
-        List<Message> conversationHistory
+        List<Message> conversationHistory,
+        Double temperature,
+        Double topP,
+        Double frequencyPenalty,
+        Double presencePenalty,
+        Map<String, Object> additionalParams
 ) {
 
     public record Message(String role, String content) {
@@ -31,9 +38,28 @@ public record LlmRequest(
         if (prompt.isBlank()) throw new IllegalArgumentException("prompt must not be blank");
         if (model.isBlank()) throw new IllegalArgumentException("model must not be blank");
         if (maxTokens < 0) throw new IllegalArgumentException("maxTokens must not be negative");
+        if (temperature != null && (temperature < 0.0 || temperature > 2.0)) {
+            throw new IllegalArgumentException("temperature must be between 0.0 and 2.0");
+        }
+        if (topP != null && (topP < 0.0 || topP > 1.0)) {
+            throw new IllegalArgumentException("topP must be between 0.0 and 1.0");
+        }
+        if (frequencyPenalty != null && (frequencyPenalty < -2.0 || frequencyPenalty > 2.0)) {
+            throw new IllegalArgumentException("frequencyPenalty must be between -2.0 and 2.0");
+        }
+        if (presencePenalty != null && (presencePenalty < -2.0 || presencePenalty > 2.0)) {
+            throw new IllegalArgumentException("presencePenalty must be between -2.0 and 2.0");
+        }
         conversationHistory = conversationHistory == null
                 ? List.of()
                 : List.copyOf(conversationHistory);
+        additionalParams = additionalParams == null
+                ? Map.of()
+                : Map.copyOf(additionalParams);
+    }
+
+    public LlmRequest(String prompt, String model, int maxTokens, String callerId, String regionContext, List<Message> conversationHistory) {
+        this(prompt, model, maxTokens, callerId, regionContext, conversationHistory, null, null, null, null, Map.of());
     }
 
     public static Builder builder(String prompt, String model) {
@@ -47,6 +73,11 @@ public record LlmRequest(
         private String callerId;
         private String regionContext;
         private List<Message> conversationHistory;
+        private Double temperature;
+        private Double topP;
+        private Double frequencyPenalty;
+        private Double presencePenalty;
+        private Map<String, Object> additionalParams = new HashMap<>();
 
         private Builder(String prompt, String model) {
             this.prompt = prompt;
@@ -73,10 +104,46 @@ public record LlmRequest(
             return this;
         }
 
+        public Builder temperature(Double temperature) {
+            this.temperature = temperature;
+            return this;
+        }
+
+        public Builder topP(Double topP) {
+            this.topP = topP;
+            return this;
+        }
+
+        public Builder frequencyPenalty(Double frequencyPenalty) {
+            this.frequencyPenalty = frequencyPenalty;
+            return this;
+        }
+
+        public Builder presencePenalty(Double presencePenalty) {
+            this.presencePenalty = presencePenalty;
+            return this;
+        }
+
+        public Builder additionalParams(Map<String, Object> additionalParams) {
+            if (additionalParams != null) {
+                this.additionalParams.putAll(additionalParams);
+            }
+            return this;
+        }
+
+        public Builder additionalParam(String key, Object value) {
+            Objects.requireNonNull(key, "key must not be null");
+            this.additionalParams.put(key, value);
+            return this;
+        }
+
         public LlmRequest build() {
             return new LlmRequest(
                     prompt, model, maxTokens,
-                    callerId, regionContext, conversationHistory);
+                    callerId, regionContext, conversationHistory,
+                    temperature, topP, frequencyPenalty, presencePenalty,
+                    additionalParams);
         }
     }
 }
+

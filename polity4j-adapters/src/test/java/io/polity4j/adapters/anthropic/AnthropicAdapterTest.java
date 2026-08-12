@@ -17,6 +17,7 @@ import java.net.InetSocketAddress;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -171,5 +172,35 @@ class AnthropicAdapterTest {
                 .isInstanceOf(ModelUnavailableException.class)
                 .cause()
                 .hasMessageContaining("Provider returned HTTP status: 503");
+    }
+
+    @Test
+    void testGenerationParametersAndAdditionalParamsSerialization() {
+        String successJson = """
+                {
+                  "id": "msg_01",
+                  "content": [{"type": "text", "text": "OK"}],
+                  "model": "claude-3-5-sonnet",
+                  "usage": {"input_tokens": 1, "output_tokens": 1}
+                }
+                """;
+        responseStatus.set(200);
+        responseBody.set(successJson);
+
+        AnthropicAdapter adapter = new AnthropicAdapter(HttpClient.newHttpClient(), "test-key", serverUrl);
+        LlmRequest request = LlmRequest.builder("Hi", "claude-3-5-sonnet")
+                .temperature(0.5)
+                .topP(0.8)
+                .additionalParam("top_k", 40)
+                .additionalParam("metadata", Map.of("user_id", "123"))
+                .build();
+
+        adapter.call(request);
+
+        String captured = capturedRequestBody.get();
+        assertThat(captured).contains("\"temperature\":0.5");
+        assertThat(captured).contains("\"top_p\":0.8");
+        assertThat(captured).contains("\"top_k\":40");
+        assertThat(captured).contains("\"metadata\":{\"user_id\":\"123\"}");
     }
 }

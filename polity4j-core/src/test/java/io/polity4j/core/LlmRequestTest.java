@@ -2,6 +2,7 @@ package io.polity4j.core;
 
 import org.junit.jupiter.api.Test;
 import java.util.List;
+import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -14,6 +15,11 @@ class LlmRequestTest {
         assertThat(request.model()).isEqualTo("claude-3-5-sonnet");
         assertThat(request.maxTokens()).isEqualTo(1024);
         assertThat(request.conversationHistory()).isEmpty();
+        assertThat(request.temperature()).isNull();
+        assertThat(request.topP()).isNull();
+        assertThat(request.frequencyPenalty()).isNull();
+        assertThat(request.presencePenalty()).isNull();
+        assertThat(request.additionalParams()).isEmpty();
     }
 
     @Test
@@ -24,11 +30,24 @@ class LlmRequestTest {
                 .callerId("service-a")
                 .regionContext("eu-west-1")
                 .conversationHistory(history)
+                .temperature(0.7)
+                .topP(0.9)
+                .frequencyPenalty(0.5)
+                .presencePenalty(0.2)
+                .additionalParam("user_id", "user_123")
+                .additionalParams(Map.of("seed", 42))
                 .build();
 
         assertThat(request.callerId()).isEqualTo("service-a");
         assertThat(request.regionContext()).isEqualTo("eu-west-1");
         assertThat(request.conversationHistory()).hasSize(1);
+        assertThat(request.temperature()).isEqualTo(0.7);
+        assertThat(request.topP()).isEqualTo(0.9);
+        assertThat(request.frequencyPenalty()).isEqualTo(0.5);
+        assertThat(request.presencePenalty()).isEqualTo(0.2);
+        assertThat(request.additionalParams())
+                .containsEntry("user_id", "user_123")
+                .containsEntry("seed", 42);
     }
 
     @Test
@@ -53,10 +72,46 @@ class LlmRequestTest {
     }
 
     @Test
+    void validatesGenerationParametersRange() {
+        assertThatThrownBy(() -> LlmRequest.builder("Hello", "gpt-4o").temperature(-0.1).build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("temperature");
+
+        assertThatThrownBy(() -> LlmRequest.builder("Hello", "gpt-4o").temperature(2.1).build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("temperature");
+
+        assertThatThrownBy(() -> LlmRequest.builder("Hello", "gpt-4o").topP(-0.1).build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("topP");
+
+        assertThatThrownBy(() -> LlmRequest.builder("Hello", "gpt-4o").topP(1.1).build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("topP");
+
+        assertThatThrownBy(() -> LlmRequest.builder("Hello", "gpt-4o").frequencyPenalty(-2.1).build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("frequencyPenalty");
+
+        assertThatThrownBy(() -> LlmRequest.builder("Hello", "gpt-4o").presencePenalty(2.1).build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("presencePenalty");
+    }
+
+    @Test
     void conversationHistoryIsImmutable() {
         var request = LlmRequest.builder("Hello", "gpt-4o").build();
         assertThatThrownBy(() ->
             request.conversationHistory().add(new LlmRequest.Message("user", "Hi")))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
+
+    @Test
+    void additionalParamsIsImmutable() {
+        var request = LlmRequest.builder("Hello", "gpt-4o").additionalParam("key", "val").build();
+        assertThatThrownBy(() ->
+            request.additionalParams().put("other", "val"))
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
 }
+

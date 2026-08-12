@@ -1,5 +1,7 @@
 package io.polity4j.adapters.anthropic;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,6 +22,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -128,7 +131,10 @@ public final class AnthropicAdapter implements LlmClient {
                 request.model(),
                 request.maxTokens(),
                 systemPrompt.isBlank() ? null : systemPrompt,
-                messages
+                messages,
+                request.temperature(),
+                request.topP(),
+                request.additionalParams()
         );
 
         return objectMapper.writeValueAsString(apiRequest);
@@ -177,13 +183,47 @@ public final class AnthropicAdapter implements LlmClient {
                 .orElse(5000L);
     }
 
-    // JSON mapping helper records
-    private record AnthropicRequest(
-            String model,
-            @JsonProperty("max_tokens") int maxTokens,
-            String system,
-            List<AnthropicMessage> messages
-    ) {}
+    // JSON mapping helper classes
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private static final class AnthropicRequest {
+        @JsonProperty("model")
+        private final String model;
+        @JsonProperty("max_tokens")
+        private final int maxTokens;
+        @JsonProperty("system")
+        private final String system;
+        @JsonProperty("messages")
+        private final List<AnthropicMessage> messages;
+        @JsonProperty("temperature")
+        private final Double temperature;
+        @JsonProperty("top_p")
+        private final Double topP;
+
+        private final Map<String, Object> additionalParams;
+
+        public AnthropicRequest(String model, int maxTokens, String system, List<AnthropicMessage> messages,
+                                Double temperature, Double topP, Map<String, Object> additionalParams) {
+            this.model = model;
+            this.maxTokens = maxTokens;
+            this.system = system;
+            this.messages = messages;
+            this.temperature = temperature;
+            this.topP = topP;
+            this.additionalParams = additionalParams != null ? additionalParams : Map.of();
+        }
+
+        public String getModel() { return model; }
+        public int getMaxTokens() { return maxTokens; }
+        public String getSystem() { return system; }
+        public List<AnthropicMessage> getMessages() { return messages; }
+        public Double getTemperature() { return temperature; }
+        public Double getTopP() { return topP; }
+
+        @JsonAnyGetter
+        public Map<String, Object> getAdditionalParams() {
+            return additionalParams;
+        }
+    }
 
     private record AnthropicMessage(String role, String content) {}
 

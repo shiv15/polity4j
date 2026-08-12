@@ -143,4 +143,38 @@ class OpenAiAdapterTest {
                 .cause()
                 .hasMessageContaining("Provider returned HTTP status: 500");
     }
+
+    @Test
+    void testGenerationParametersAndAdditionalParamsSerialization() {
+        String successJson = """
+                {
+                  "id": "chatcmpl-123",
+                  "object": "chat.completion",
+                  "choices": [{"index": 0, "message": {"role": "assistant", "content": "OK"}}],
+                  "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+                }
+                """;
+        responseStatus.set(200);
+        responseBody.set(successJson);
+
+        OpenAiAdapter adapter = new OpenAiAdapter(HttpClient.newHttpClient(), "test-key-openai", serverUrl);
+        LlmRequest request = LlmRequest.builder("Hi", "gpt-4o")
+                .temperature(0.7)
+                .topP(0.9)
+                .frequencyPenalty(0.5)
+                .presencePenalty(0.2)
+                .additionalParam("user", "user_abc")
+                .additionalParam("seed", 1234)
+                .build();
+
+        adapter.call(request);
+
+        String captured = capturedRequestBody.get();
+        assertThat(captured).contains("\"temperature\":0.7");
+        assertThat(captured).contains("\"top_p\":0.9");
+        assertThat(captured).contains("\"frequency_penalty\":0.5");
+        assertThat(captured).contains("\"presence_penalty\":0.2");
+        assertThat(captured).contains("\"user\":\"user_abc\"");
+        assertThat(captured).contains("\"seed\":1234");
+    }
 }

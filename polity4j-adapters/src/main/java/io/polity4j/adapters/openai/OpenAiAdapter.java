@@ -1,5 +1,7 @@
 package io.polity4j.adapters.openai;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,6 +21,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -112,7 +115,12 @@ public final class OpenAiAdapter implements LlmClient {
         OpenAiRequest apiRequest = new OpenAiRequest(
                 request.model(),
                 request.maxTokens() > 0 ? request.maxTokens() : null,
-                messages
+                messages,
+                request.temperature(),
+                request.topP(),
+                request.frequencyPenalty(),
+                request.presencePenalty(),
+                request.additionalParams()
         );
 
         return objectMapper.writeValueAsString(apiRequest);
@@ -166,12 +174,52 @@ public final class OpenAiAdapter implements LlmClient {
                 .orElse(5000L);
     }
 
-    // JSON mapping helper records
-    private record OpenAiRequest(
-            String model,
-            @JsonProperty("max_tokens") Integer maxTokens,
-            List<OpenAiMessage> messages
-    ) {}
+    // JSON mapping helper classes
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private static final class OpenAiRequest {
+        @JsonProperty("model")
+        private final String model;
+        @JsonProperty("max_tokens")
+        private final Integer maxTokens;
+        @JsonProperty("messages")
+        private final List<OpenAiMessage> messages;
+        @JsonProperty("temperature")
+        private final Double temperature;
+        @JsonProperty("top_p")
+        private final Double topP;
+        @JsonProperty("frequency_penalty")
+        private final Double frequencyPenalty;
+        @JsonProperty("presence_penalty")
+        private final Double presencePenalty;
+
+        private final Map<String, Object> additionalParams;
+
+        public OpenAiRequest(String model, Integer maxTokens, List<OpenAiMessage> messages,
+                             Double temperature, Double topP, Double frequencyPenalty, Double presencePenalty,
+                             Map<String, Object> additionalParams) {
+            this.model = model;
+            this.maxTokens = maxTokens;
+            this.messages = messages;
+            this.temperature = temperature;
+            this.topP = topP;
+            this.frequencyPenalty = frequencyPenalty;
+            this.presencePenalty = presencePenalty;
+            this.additionalParams = additionalParams != null ? additionalParams : Map.of();
+        }
+
+        public String getModel() { return model; }
+        public Integer getMaxTokens() { return maxTokens; }
+        public List<OpenAiMessage> getMessages() { return messages; }
+        public Double getTemperature() { return temperature; }
+        public Double getTopP() { return topP; }
+        public Double getFrequencyPenalty() { return frequencyPenalty; }
+        public Double getPresencePenalty() { return presencePenalty; }
+
+        @JsonAnyGetter
+        public Map<String, Object> getAdditionalParams() {
+            return additionalParams;
+        }
+    }
 
     private record OpenAiMessage(String role, String content) {}
 

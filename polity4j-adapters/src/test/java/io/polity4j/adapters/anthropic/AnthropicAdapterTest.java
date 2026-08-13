@@ -1,6 +1,7 @@
 package io.polity4j.adapters.anthropic;
 
 import com.sun.net.httpserver.HttpServer;
+import io.polity4j.core.FinishReason;
 import io.polity4j.core.LlmRequest;
 import io.polity4j.core.LlmResponse;
 import io.polity4j.core.exception.ModelUnavailableException;
@@ -97,6 +98,7 @@ class AnthropicAdapterTest {
         assertThat(response.provider()).isEqualTo("anthropic");
         assertThat(response.inputTokens()).isEqualTo(100);
         assertThat(response.outputTokens()).isEqualTo(50);
+        assertThat(response.finishReason()).isEqualTo(FinishReason.STOP);
         // Cost: 100 * 0.000003 + 50 * 0.000015 = 0.0003 + 0.00075 = 0.00105
         assertThat(response.estimatedCost()).isEqualByComparingTo(new BigDecimal("0.00105"));
     }
@@ -203,4 +205,25 @@ class AnthropicAdapterTest {
         assertThat(captured).contains("\"top_k\":40");
         assertThat(captured).contains("\"metadata\":{\"user_id\":\"123\"}");
     }
+
+    @Test
+    void testFinishReasonMapping() {
+        AnthropicAdapter adapter = new AnthropicAdapter(HttpClient.newHttpClient(), "test-key", serverUrl);
+        LlmRequest request = LlmRequest.builder("Hi", "claude-3-5-sonnet").build();
+
+        responseStatus.set(200);
+
+        responseBody.set("{\"content\":[{\"text\":\"a\"}],\"stop_reason\":\"max_tokens\"}");
+        assertThat(adapter.call(request).finishReason()).isEqualTo(FinishReason.LENGTH);
+
+        responseBody.set("{\"content\":[{\"text\":\"b\"}],\"stop_reason\":\"stop_sequence\"}");
+        assertThat(adapter.call(request).finishReason()).isEqualTo(FinishReason.STOP);
+
+        responseBody.set("{\"content\":[{\"text\":\"c\"}],\"stop_reason\":\"tool_use\"}");
+        assertThat(adapter.call(request).finishReason()).isEqualTo(FinishReason.TOOL_CALLS);
+
+        responseBody.set("{\"content\":[{\"text\":\"d\"}],\"stop_reason\":\"unknown_reason\"}");
+        assertThat(adapter.call(request).finishReason()).isEqualTo(FinishReason.UNKNOWN);
+    }
 }
+

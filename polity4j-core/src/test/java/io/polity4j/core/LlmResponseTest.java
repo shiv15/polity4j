@@ -13,6 +13,21 @@ class LlmResponseTest {
         assertThat(response.content()).isEqualTo("Hello back");
         assertThat(response.provider()).isEqualTo("anthropic");
         assertThat(response.estimatedCost()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(response.finishReason()).isEqualTo(FinishReason.UNKNOWN);
+    }
+
+    @Test
+    void builderSetsFinishReasonExplicitly() {
+        var response = LlmResponse.builder("Hello back", "gpt-4o", "openai")
+                .finishReason(FinishReason.STOP)
+                .build();
+        assertThat(response.finishReason()).isEqualTo(FinishReason.STOP);
+    }
+
+    @Test
+    void nullFinishReasonDefaultsToUnknown() {
+        var response = new LlmResponse("Hi", "gpt-4o", "openai", 10, 5, BigDecimal.ZERO, 100L, null);
+        assertThat(response.finishReason()).isEqualTo(FinishReason.UNKNOWN);
     }
 
     @Test
@@ -40,3 +55,4 @@ class LlmResponseTest {
                 .isInstanceOf(NullPointerException.class);
     }
 }
+

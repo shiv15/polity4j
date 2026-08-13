@@ -1,6 +1,7 @@
 package io.polity4j.adapters.openai;
 
 import com.sun.net.httpserver.HttpServer;
+import io.polity4j.core.FinishReason;
 import io.polity4j.core.LlmRequest;
 import io.polity4j.core.LlmResponse;
 import io.polity4j.core.exception.ModelUnavailableException;
@@ -105,6 +106,7 @@ class OpenAiAdapterTest {
         assertThat(response.provider()).isEqualTo("openai");
         assertThat(response.inputTokens()).isEqualTo(80);
         assertThat(response.outputTokens()).isEqualTo(40);
+        assertThat(response.finishReason()).isEqualTo(FinishReason.STOP);
         // Cost: 80 * 0.0000025 + 40 * 0.000010 = 0.0002 + 0.0004 = 0.0006
         assertThat(response.estimatedCost()).isEqualByComparingTo(new java.math.BigDecimal("0.0006"));
 
@@ -177,4 +179,25 @@ class OpenAiAdapterTest {
         assertThat(captured).contains("\"user\":\"user_abc\"");
         assertThat(captured).contains("\"seed\":1234");
     }
+
+    @Test
+    void testFinishReasonMapping() {
+        OpenAiAdapter adapter = new OpenAiAdapter(HttpClient.newHttpClient(), "test-key-openai", serverUrl);
+        LlmRequest request = LlmRequest.builder("Hi", "gpt-4o").build();
+
+        responseStatus.set(200);
+
+        responseBody.set("{\"choices\":[{\"message\":{\"content\":\"a\"},\"finish_reason\":\"length\"}]}");
+        assertThat(adapter.call(request).finishReason()).isEqualTo(FinishReason.LENGTH);
+
+        responseBody.set("{\"choices\":[{\"message\":{\"content\":\"b\"},\"finish_reason\":\"content_filter\"}]}");
+        assertThat(adapter.call(request).finishReason()).isEqualTo(FinishReason.CONTENT_FILTER);
+
+        responseBody.set("{\"choices\":[{\"message\":{\"content\":\"c\"},\"finish_reason\":\"tool_calls\"}]}");
+        assertThat(adapter.call(request).finishReason()).isEqualTo(FinishReason.TOOL_CALLS);
+
+        responseBody.set("{\"choices\":[{\"message\":{\"content\":\"d\"},\"finish_reason\":\"unknown_reason\"}]}");
+        assertThat(adapter.call(request).finishReason()).isEqualTo(FinishReason.UNKNOWN);
+    }
 }
+

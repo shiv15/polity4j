@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.polity4j.core.FinishReason;
 import io.polity4j.core.LlmClient;
 import io.polity4j.core.LlmRequest;
 import io.polity4j.core.LlmResponse;
@@ -164,10 +165,23 @@ public final class AnthropicAdapter implements LlmClient {
                     .outputTokens(outputTokens)
                     .estimatedCost(estimatedCost)
                     .latencyMs(latencyMs)
+                    .finishReason(parseFinishReason(response.stopReason()))
                     .build();
         } catch (IOException e) {
             throw new ModelUnavailableException(model, provider(), new RuntimeException("Failed to deserialize Anthropic success payload", e));
         }
+    }
+
+    private FinishReason parseFinishReason(String reason) {
+        if (reason == null) {
+            return FinishReason.UNKNOWN;
+        }
+        return switch (reason.toLowerCase()) {
+            case "end_turn", "stop_sequence" -> FinishReason.STOP;
+            case "max_tokens" -> FinishReason.LENGTH;
+            case "tool_use" -> FinishReason.TOOL_CALLS;
+            default -> FinishReason.UNKNOWN;
+        };
     }
 
     private long parseRetryAfter(HttpResponse<String> response) {

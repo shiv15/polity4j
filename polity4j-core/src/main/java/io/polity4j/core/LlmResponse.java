@@ -15,7 +15,8 @@ public record LlmResponse(
         int inputTokens,
         int outputTokens,
         BigDecimal estimatedCost,
-        long latencyMs
+        long latencyMs,
+        FinishReason finishReason
 ) {
 
     public LlmResponse {
@@ -26,6 +27,11 @@ public record LlmResponse(
         if (inputTokens < 0) throw new IllegalArgumentException("inputTokens must not be negative");
         if (outputTokens < 0) throw new IllegalArgumentException("outputTokens must not be negative");
         if (latencyMs < 0) throw new IllegalArgumentException("latencyMs must not be negative");
+        finishReason = finishReason == null ? FinishReason.UNKNOWN : finishReason;
+    }
+
+    public LlmResponse(String content, String model, String provider, int inputTokens, int outputTokens, BigDecimal estimatedCost, long latencyMs) {
+        this(content, model, provider, inputTokens, outputTokens, estimatedCost, latencyMs, FinishReason.UNKNOWN);
     }
 
     public int totalTokens() {
@@ -44,6 +50,7 @@ public record LlmResponse(
         private int outputTokens;
         private BigDecimal estimatedCost = BigDecimal.ZERO;
         private long latencyMs;
+        private FinishReason finishReason = FinishReason.UNKNOWN;
 
         private Builder(String content, String model, String provider) {
             this.content = content;
@@ -71,11 +78,17 @@ public record LlmResponse(
             return this;
         }
 
+        public Builder finishReason(FinishReason finishReason) {
+            this.finishReason = finishReason;
+            return this;
+        }
+
         public LlmResponse build() {
             return new LlmResponse(
                     content, model, provider,
                     inputTokens, outputTokens,
-                    estimatedCost, latencyMs);
+                    estimatedCost, latencyMs, finishReason);
         }
     }
 }
+

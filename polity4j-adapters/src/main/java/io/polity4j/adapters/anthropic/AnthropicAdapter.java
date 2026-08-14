@@ -114,11 +114,13 @@ public final class AnthropicAdapter implements LlmClient {
     }
 
     private String buildRequestBody(LlmRequest request) throws IOException {
-        // Anthropic requires system prompt as root field, and system roles filtered out of messages array.
-        String systemPrompt = request.conversationHistory().stream()
-                .filter(m -> "system".equalsIgnoreCase(m.role()))
-                .map(LlmRequest.Message::content)
-                .collect(Collectors.joining("\n"));
+        String systemPrompt = request.systemPrompt();
+        if (systemPrompt == null || systemPrompt.isBlank()) {
+            systemPrompt = request.conversationHistory().stream()
+                    .filter(m -> "system".equalsIgnoreCase(m.role()))
+                    .map(LlmRequest.Message::content)
+                    .collect(Collectors.joining("\n"));
+        }
 
         List<AnthropicMessage> messages = request.conversationHistory().stream()
                 .filter(m -> !"system".equalsIgnoreCase(m.role()))

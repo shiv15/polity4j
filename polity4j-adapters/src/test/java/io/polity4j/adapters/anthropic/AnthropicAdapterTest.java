@@ -225,5 +225,30 @@ class AnthropicAdapterTest {
         responseBody.set("{\"content\":[{\"text\":\"d\"}],\"stop_reason\":\"unknown_reason\"}");
         assertThat(adapter.call(request).finishReason()).isEqualTo(FinishReason.UNKNOWN);
     }
+
+    @Test
+    void testExplicitSystemPromptHandling() {
+        String successJson = """
+                {
+                  "id": "msg_01",
+                  "content": [{"type": "text", "text": "OK"}],
+                  "model": "claude-3-5-sonnet",
+                  "usage": {"input_tokens": 1, "output_tokens": 1}
+                }
+                """;
+        responseStatus.set(200);
+        responseBody.set(successJson);
+
+        AnthropicAdapter adapter = new AnthropicAdapter(HttpClient.newHttpClient(), "test-key", serverUrl);
+        LlmRequest request = LlmRequest.builder("Hi", "claude-3-5-sonnet")
+                .systemPrompt("You are an expert Java architect.")
+                .build();
+
+        adapter.call(request);
+
+        String captured = capturedRequestBody.get();
+        assertThat(captured).contains("\"system\":\"You are an expert Java architect.\"");
+        assertThat(captured).contains("{\"role\":\"user\",\"content\":\"Hi\"}");
+    }
 }
 

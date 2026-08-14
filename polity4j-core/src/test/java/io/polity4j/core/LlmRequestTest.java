@@ -20,12 +20,14 @@ class LlmRequestTest {
         assertThat(request.frequencyPenalty()).isNull();
         assertThat(request.presencePenalty()).isNull();
         assertThat(request.additionalParams()).isEmpty();
+        assertThat(request.systemPrompt()).isNull();
     }
 
     @Test
     void buildsWithAllFields() {
         var history = List.of(new LlmRequest.Message("user", "Hi"));
         var request = LlmRequest.builder("Hello", "gpt-4o")
+                .systemPrompt("You are a helpful assistant.")
                 .maxTokens(2048)
                 .callerId("service-a")
                 .regionContext("eu-west-1")
@@ -38,6 +40,7 @@ class LlmRequestTest {
                 .additionalParams(Map.of("seed", 42))
                 .build();
 
+        assertThat(request.systemPrompt()).isEqualTo("You are a helpful assistant.");
         assertThat(request.callerId()).isEqualTo("service-a");
         assertThat(request.regionContext()).isEqualTo("eu-west-1");
         assertThat(request.conversationHistory()).hasSize(1);

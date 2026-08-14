@@ -22,7 +22,8 @@ public record LlmRequest(
         Double topP,
         Double frequencyPenalty,
         Double presencePenalty,
-        Map<String, Object> additionalParams
+        Map<String, Object> additionalParams,
+        String systemPrompt
 ) {
 
     public record Message(String role, String content) {
@@ -59,7 +60,11 @@ public record LlmRequest(
     }
 
     public LlmRequest(String prompt, String model, int maxTokens, String callerId, String regionContext, List<Message> conversationHistory) {
-        this(prompt, model, maxTokens, callerId, regionContext, conversationHistory, null, null, null, null, Map.of());
+        this(prompt, model, maxTokens, callerId, regionContext, conversationHistory, null, null, null, null, Map.of(), null);
+    }
+
+    public LlmRequest(String prompt, String model, int maxTokens, String callerId, String regionContext, List<Message> conversationHistory, Double temperature, Double topP, Double frequencyPenalty, Double presencePenalty, Map<String, Object> additionalParams) {
+        this(prompt, model, maxTokens, callerId, regionContext, conversationHistory, temperature, topP, frequencyPenalty, presencePenalty, additionalParams, null);
     }
 
     public static Builder builder(String prompt, String model) {
@@ -78,6 +83,7 @@ public record LlmRequest(
         private Double frequencyPenalty;
         private Double presencePenalty;
         private Map<String, Object> additionalParams = new HashMap<>();
+        private String systemPrompt;
 
         private Builder(String prompt, String model) {
             this.prompt = prompt;
@@ -137,12 +143,17 @@ public record LlmRequest(
             return this;
         }
 
+        public Builder systemPrompt(String systemPrompt) {
+            this.systemPrompt = systemPrompt;
+            return this;
+        }
+
         public LlmRequest build() {
             return new LlmRequest(
                     prompt, model, maxTokens,
                     callerId, regionContext, conversationHistory,
                     temperature, topP, frequencyPenalty, presencePenalty,
-                    additionalParams);
+                    additionalParams, systemPrompt);
         }
     }
 }

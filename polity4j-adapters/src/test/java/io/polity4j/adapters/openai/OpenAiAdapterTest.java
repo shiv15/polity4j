@@ -199,5 +199,30 @@ class OpenAiAdapterTest {
         responseBody.set("{\"choices\":[{\"message\":{\"content\":\"d\"},\"finish_reason\":\"unknown_reason\"}]}");
         assertThat(adapter.call(request).finishReason()).isEqualTo(FinishReason.UNKNOWN);
     }
+
+    @Test
+    void testExplicitSystemPromptHandling() {
+        String successJson = """
+                {
+                  "id": "chatcmpl-123",
+                  "object": "chat.completion",
+                  "choices": [{"index": 0, "message": {"role": "assistant", "content": "OK"}}],
+                  "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+                }
+                """;
+        responseStatus.set(200);
+        responseBody.set(successJson);
+
+        OpenAiAdapter adapter = new OpenAiAdapter(HttpClient.newHttpClient(), "test-key-openai", serverUrl);
+        LlmRequest request = LlmRequest.builder("Hi", "gpt-4o")
+                .systemPrompt("You are an expert Java architect.")
+                .build();
+
+        adapter.call(request);
+
+        String captured = capturedRequestBody.get();
+        assertThat(captured).contains("{\"role\":\"system\",\"content\":\"You are an expert Java architect.\"}");
+        assertThat(captured).contains("{\"role\":\"user\",\"content\":\"Hi\"}");
+    }
 }
 

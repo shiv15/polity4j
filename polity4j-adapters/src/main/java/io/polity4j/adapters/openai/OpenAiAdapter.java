@@ -108,7 +108,14 @@ public final class OpenAiAdapter implements LlmClient {
 
     private String buildRequestBody(LlmRequest request) throws IOException {
         List<OpenAiMessage> messages = new ArrayList<>();
+        boolean hasExplicitSystemPrompt = request.systemPrompt() != null && !request.systemPrompt().isBlank();
+        if (hasExplicitSystemPrompt) {
+            messages.add(new OpenAiMessage("system", request.systemPrompt()));
+        }
         for (var msg : request.conversationHistory()) {
+            if (hasExplicitSystemPrompt && "system".equalsIgnoreCase(msg.role())) {
+                continue;
+            }
             messages.add(new OpenAiMessage(msg.role(), msg.content()));
         }
         messages.add(new OpenAiMessage("user", request.prompt()));

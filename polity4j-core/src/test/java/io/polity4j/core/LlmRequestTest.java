@@ -54,6 +54,17 @@ class LlmRequestTest {
     }
 
     @Test
+    void multimodalMessageSupportsContentParts() {
+        var textPart = new ContentPart.TextContentPart("Describe this image:");
+        var imagePart = ContentPart.ImageContentPart.ofUrl("https://example.com/photo.png");
+        var message = new LlmRequest.Message("user", List.of(textPart, imagePart));
+
+        assertThat(message.role()).isEqualTo("user");
+        assertThat(message.parts()).containsExactly(textPart, imagePart);
+        assertThat(message.content()).isEqualTo("Describe this image:");
+    }
+
+    @Test
     void rejectsNullPrompt() {
         assertThatThrownBy(() ->
             LlmRequest.builder(null, "gpt-4o").build())

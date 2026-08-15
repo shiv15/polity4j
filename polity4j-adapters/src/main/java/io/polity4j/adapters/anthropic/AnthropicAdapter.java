@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.polity4j.core.ContentPart;
 import io.polity4j.core.FinishReason;
 import io.polity4j.core.LlmClient;
 import io.polity4j.core.LlmRequest;
@@ -124,7 +125,7 @@ public final class AnthropicAdapter implements LlmClient {
 
         List<AnthropicMessage> messages = request.conversationHistory().stream()
                 .filter(m -> !"system".equalsIgnoreCase(m.role()))
-                .map(m -> new AnthropicMessage(m.role(), m.content()))
+                .map(m -> new AnthropicMessage(m.role(), formatAnthropicContent(m.parts())))
                 .collect(Collectors.toCollection(ArrayList::new));
 
         // Add the current prompt turn
@@ -141,6 +142,41 @@ public final class AnthropicAdapter implements LlmClient {
         );
 
         return objectMapper.writeValueAsString(apiRequest);
+    }
+
+    private Object formatAnthropicContent(List<ContentPart> parts) {
+        if (parts == null || parts.isEmpty()) {
+            return "";
+        }
+        if (parts.size() == 1 && parts.get(0) instanceof ContentPart.TextContentPart textPart) {
+            return textPart.text();
+        }
+
+        List<Map<String, Object>> contentList = new ArrayList<>();
+        for (ContentPart part : parts) {
+            if (part instanceof ContentPart.TextContentPart textPart) {
+                contentList.add(Map.of("type", "text", "text", textPart.text()));
+            } else if (part instanceof ContentPart.ImageContentPart imgPart) {
+                contentList.add(Map.of(
+                        "type", "image",
+                        "source", Map.of(
+                                "type", "base64",
+                                "media_type", imgPart.mediaType(),
+                                "data", imgPart.data()
+                        )
+                ));
+            } else if (part instanceof ContentPart.DocumentContentPart docPart) {
+                contentList.add(Map.of(
+                        "type", "document",
+                        "source", Map.of(
+                                "type", "base64",
+                                "media_type", docPart.mediaType(),
+                                "data", docPart.data()
+                        )
+                ));
+            }
+        }
+        return contentList;
     }
 
     private LlmResponse parseSuccessResponse(String body, String model, long latencyMs) throws PolityException {
@@ -241,7 +277,7 @@ public final class AnthropicAdapter implements LlmClient {
         }
     }
 
-    private record AnthropicMessage(String role, String content) {}
+    private record AnthropicMessage(String role, Object content) {}
 
     private record AnthropicResponse(
             String id,

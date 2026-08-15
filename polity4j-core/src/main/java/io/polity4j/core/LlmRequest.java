@@ -26,10 +26,21 @@ public record LlmRequest(
         String systemPrompt
 ) {
 
-    public record Message(String role, String content) {
+    public record Message(String role, List<ContentPart> parts) {
         public Message {
             Objects.requireNonNull(role, "role must not be null");
-            Objects.requireNonNull(content, "content must not be null");
+            parts = parts == null ? List.of() : List.copyOf(parts);
+        }
+
+        public Message(String role, String text) {
+            this(role, List.of(new ContentPart.TextContentPart(Objects.requireNonNull(text, "content must not be null"))));
+        }
+
+        public String content() {
+            return parts.stream()
+                    .filter(p -> p instanceof ContentPart.TextContentPart)
+                    .map(p -> ((ContentPart.TextContentPart) p).text())
+                    .collect(java.util.stream.Collectors.joining("\n"));
         }
     }
 

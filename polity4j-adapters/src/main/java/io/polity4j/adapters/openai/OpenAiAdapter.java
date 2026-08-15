@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.polity4j.core.ContentPart;
 import io.polity4j.core.FinishReason;
 import io.polity4j.core.LlmClient;
 import io.polity4j.core.LlmRequest;
@@ -116,7 +117,7 @@ public final class OpenAiAdapter implements LlmClient {
             if (hasExplicitSystemPrompt && "system".equalsIgnoreCase(msg.role())) {
                 continue;
             }
-            messages.add(new OpenAiMessage(msg.role(), msg.content()));
+            messages.add(new OpenAiMessage(msg.role(), formatOpenAiContent(msg.parts())));
         }
         messages.add(new OpenAiMessage("user", request.prompt()));
 
@@ -134,6 +135,31 @@ public final class OpenAiAdapter implements LlmClient {
         return objectMapper.writeValueAsString(apiRequest);
     }
 
+    private Object formatOpenAiContent(List<ContentPart> parts) {
+        if (parts == null || parts.isEmpty()) {
+            return "";
+        }
+        if (parts.size() == 1 && parts.get(0) instanceof ContentPart.TextContentPart textPart) {
+            return textPart.text();
+        }
+
+        List<Map<String, Object>> contentList = new ArrayList<>();
+        for (ContentPart part : parts) {
+            if (part instanceof ContentPart.TextContentPart textPart) {
+                contentList.add(Map.of("type", "text", "text", textPart.text()));
+            } else if (part instanceof ContentPart.ImageContentPart imgPart) {
+                String url = imgPart.sourceType() == ContentPart.SourceType.URL
+                        ? imgPart.data()
+                        : "data:" + imgPart.mediaType() + ";base64," + imgPart.data();
+                contentList.add(Map.of("type", "image_url", "image_url", Map.of("url", url)));
+            } else if (part instanceof ContentPart.DocumentContentPart docPart) {
+                String url = "data:" + docPart.mediaType() + ";base64," + docPart.data();
+                contentList.add(Map.of("type", "image_url", "image_url", Map.of("url", url)));
+            }
+        }
+        return contentList;
+    }
+
     private LlmResponse parseSuccessResponse(String body, String model, long latencyMs) throws PolityException {
         try {
             OpenAiResponse response = objectMapper.readValue(body, OpenAiResponse.class);
@@ -146,7 +172,7 @@ public final class OpenAiAdapter implements LlmClient {
                 throw new ModelUnavailableException(model, provider(), new RuntimeException("Response choices had no message: " + body));
             }
 
-            String contentText = choice.message().content();
+            String contentText = choice.message().content() != null ? choice.message().content().toString() : "";
             int inputTokens = 0;
             int outputTokens = 0;
             if (response.usage() != null) {
@@ -243,7 +269,7 @@ public final class OpenAiAdapter implements LlmClient {
         }
     }
 
-    private record OpenAiMessage(String role, String content) {}
+    private record OpenAiMessage(String role, Object content) {}
 
     private record OpenAiResponse(
             String id,

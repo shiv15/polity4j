@@ -250,5 +250,35 @@ class AnthropicAdapterTest {
         assertThat(captured).contains("\"system\":\"You are an expert Java architect.\"");
         assertThat(captured).contains("{\"role\":\"user\",\"content\":\"Hi\"}");
     }
+
+    @Test
+    void testMultimodalImageAndDocumentMessage() {
+        String successJson = """
+                {
+                  "id": "msg_01",
+                  "content": [{"type": "text", "text": "Analyzed document and image."}],
+                  "model": "claude-3-5-sonnet",
+                  "usage": {"input_tokens": 150, "output_tokens": 15}
+                }
+                """;
+        responseStatus.set(200);
+        responseBody.set(successJson);
+
+        AnthropicAdapter adapter = new AnthropicAdapter(HttpClient.newHttpClient(), "test-key", serverUrl);
+        var textPart = new io.polity4j.core.ContentPart.TextContentPart("Analyze PDF & image:");
+        var imagePart = io.polity4j.core.ContentPart.ImageContentPart.ofBase64("image/png", "img_base64_data");
+        var docPart = io.polity4j.core.ContentPart.DocumentContentPart.ofBase64("application/pdf", "pdf_base64_data");
+        LlmRequest request = LlmRequest.builder("Final prompt", "claude-3-5-sonnet")
+                .conversationHistory(List.of(new LlmRequest.Message("user", List.of(textPart, imagePart, docPart))))
+                .build();
+
+        adapter.call(request);
+
+        String captured = capturedRequestBody.get();
+        assertThat(captured).contains("\"type\":\"image\"");
+        assertThat(captured).contains("\"media_type\":\"image/png\"");
+        assertThat(captured).contains("\"type\":\"document\"");
+        assertThat(captured).contains("\"media_type\":\"application/pdf\"");
+    }
 }
 

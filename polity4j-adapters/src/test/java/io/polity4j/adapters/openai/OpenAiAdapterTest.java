@@ -224,5 +224,33 @@ class OpenAiAdapterTest {
         assertThat(captured).contains("{\"role\":\"system\",\"content\":\"You are an expert Java architect.\"}");
         assertThat(captured).contains("{\"role\":\"user\",\"content\":\"Hi\"}");
     }
+
+    @Test
+    void testMultimodalImageMessage() {
+        String successJson = """
+                {
+                  "id": "chatcmpl-123",
+                  "object": "chat.completion",
+                  "choices": [{"index": 0, "message": {"role": "assistant", "content": "It is a logo."}}],
+                  "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110}
+                }
+                """;
+        responseStatus.set(200);
+        responseBody.set(successJson);
+
+        OpenAiAdapter adapter = new OpenAiAdapter(HttpClient.newHttpClient(), "test-key-openai", serverUrl);
+        var textPart = new io.polity4j.core.ContentPart.TextContentPart("Analyze this:");
+        var imagePart = io.polity4j.core.ContentPart.ImageContentPart.ofUrl("https://example.com/logo.png");
+        LlmRequest request = LlmRequest.builder("Final prompt", "gpt-4o")
+                .conversationHistory(List.of(new LlmRequest.Message("user", List.of(textPart, imagePart))))
+                .build();
+
+        adapter.call(request);
+
+        String captured = capturedRequestBody.get();
+        assertThat(captured).contains("\"type\":\"image_url\"");
+        assertThat(captured).contains("\"url\":\"https://example.com/logo.png\"");
+        assertThat(captured).contains("\"text\":\"Analyze this:\"");
+    }
 }
 

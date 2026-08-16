@@ -175,6 +175,46 @@ try {
 
 ---
 
+## Non-Blocking & Reactive Integration
+
+Polity4j's `LlmPipeline.execute(request)` is completely thread-safe and stateless. It integrates seamlessly into high-throughput reactive frameworks and async execution environments without duplicating pipeline abstractions.
+
+### 1. Java 21+ Virtual Threads (Recommended)
+
+In Java 21+, socket I/O suspends Virtual Threads without blocking platform OS threads:
+
+```java
+try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+    Future<LlmResponse> future = executor.submit(() -> pipeline.execute(request));
+    LlmResponse response = future.get();
+}
+```
+
+### 2. Spring WebFlux / Project Reactor
+
+Integrate Polity4j into reactive event loops via `boundedElastic` scheduler:
+
+```java
+@GetMapping("/ask")
+public Mono<LlmResponse> ask(@RequestParam String prompt) {
+    LlmRequest request = LlmRequest.builder(prompt, "gpt-4o").build();
+    return Mono.fromCallable(() -> pipeline.execute(request))
+               .subscribeOn(Schedulers.boundedElastic());
+}
+```
+
+### 3. Kotlin Coroutines
+
+Execute pipeline requests cleanly within IO coroutine contexts:
+
+```kotlin
+suspend fun ask(request: LlmRequest): LlmResponse = withContext(Dispatchers.IO) {
+    pipeline.execute(request)
+}
+```
+
+---
+
 ## Running Examples
 
 To run the live reliability demo using the Anthropic API:

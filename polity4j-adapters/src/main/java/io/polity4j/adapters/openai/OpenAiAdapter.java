@@ -167,7 +167,9 @@ public final class OpenAiAdapter implements LlmClient {
                             finalFinishReason = parseFinishReason(choice.finishReason());
                         }
                     }
-                } catch (Exception ignored) {
+                } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                    throw new ModelUnavailableException(request.model(), provider(),
+                            new RuntimeException("Failed to parse OpenAI SSE stream chunk payload: " + data, e));
                 }
             }
         }

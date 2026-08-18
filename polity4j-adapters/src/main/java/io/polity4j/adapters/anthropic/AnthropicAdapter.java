@@ -173,7 +173,9 @@ public final class AnthropicAdapter implements LlmClient {
                     } else if ("message_delta".equalsIgnoreCase(event.type()) && event.delta() != null && event.delta().stopReason() != null) {
                         finalFinishReason = parseFinishReason(event.delta().stopReason());
                     }
-                } catch (Exception ignored) {
+                } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                    throw new ModelUnavailableException(request.model(), provider(),
+                            new RuntimeException("Failed to parse Anthropic SSE stream chunk payload: " + data, e));
                 }
             }
         }

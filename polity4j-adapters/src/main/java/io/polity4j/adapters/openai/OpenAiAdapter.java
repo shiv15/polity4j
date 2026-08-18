@@ -66,7 +66,7 @@ public final class OpenAiAdapter implements LlmClient {
 
         String requestBody;
         try {
-            requestBody = buildRequestBody(request);
+            requestBody = buildRequestBody(request, false);
         } catch (IOException e) {
             throw new ModelUnavailableException(request.model(), provider(), new RuntimeException("Failed to serialize request to JSON", e));
         }
@@ -103,11 +103,99 @@ public final class OpenAiAdapter implements LlmClient {
     }
 
     @Override
+    public LlmResponse callStreaming(LlmRequest request, java.util.function.Consumer<String> tokenHandler) throws PolityException {
+        Objects.requireNonNull(request, "request must not be null");
+
+        String requestBody;
+        try {
+            requestBody = buildRequestBody(request, true);
+        } catch (IOException e) {
+            throw new ModelUnavailableException(request.model(), provider(), new RuntimeException("Failed to serialize request to JSON", e));
+        }
+
+        HttpRequest httpRequest = HttpRequest.newBuilder()
+                .uri(URI.create(apiUrl))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + apiKey)
+                .timeout(Duration.ofSeconds(60))
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                .build();
+
+        long startTime = System.currentTimeMillis();
+        HttpResponse<java.util.stream.Stream<String>> httpResponse;
+        try {
+            httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofLines());
+        } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            throw new ModelUnavailableException(request.model(), provider(), new RuntimeException("HTTP call interrupted or connection failed", e));
+        }
+        long latencyMs = System.currentTimeMillis() - startTime;
+
+        int statusCode = httpResponse.statusCode();
+        if (statusCode != 200) {
+            if (statusCode == 429) {
+                throw new RateLimitException(provider(), parseRetryAfter(httpResponse));
+            }
+            throw new ModelUnavailableException(request.model(), provider(), new RuntimeException("Unexpected status: " + statusCode));
+        }
+
+        StringBuilder fullContent = new StringBuilder();
+        FinishReason finalFinishReason = FinishReason.STOP;
+
+        try (var lines = httpResponse.body()) {
+            for (String line : (Iterable<String>) lines::iterator) {
+                if (line == null || line.isBlank()) continue;
+                String trimmed = line.trim();
+                if (!trimmed.startsWith("data:")) continue;
+                String data = trimmed.substring(5).trim();
+                if ("[DONE]".equals(data)) break;
+
+                try {
+                    StreamChunk chunk = objectMapper.readValue(data, StreamChunk.class);
+                    if (chunk.choices() != null && !chunk.choices().isEmpty()) {
+                        StreamChoice choice = chunk.choices().get(0);
+                        if (choice.delta() != null && choice.delta().content() != null) {
+                            String token = choice.delta().content();
+                            fullContent.append(token);
+                            if (tokenHandler != null) {
+                                tokenHandler.accept(token);
+                            }
+                        }
+                        if (choice.finishReason() != null) {
+                            finalFinishReason = parseFinishReason(choice.finishReason());
+                        }
+                    }
+                } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                    throw new ModelUnavailableException(request.model(), provider(),
+                            new RuntimeException("Failed to parse OpenAI SSE stream chunk payload: " + data, e));
+                }
+            }
+        }
+
+        String contentText = fullContent.toString();
+        int inputTokens = request.prompt().length() / 4;
+        int outputTokens = contentText.length() / 4;
+
+        BigDecimal estimatedCost = BigDecimal.valueOf(inputTokens).multiply(new BigDecimal("0.0000025"))
+                .add(BigDecimal.valueOf(outputTokens).multiply(new BigDecimal("0.000010")));
+
+        return LlmResponse.builder(contentText, request.model(), provider())
+                .inputTokens(inputTokens)
+                .outputTokens(outputTokens)
+                .estimatedCost(estimatedCost)
+                .latencyMs(latencyMs)
+                .finishReason(finalFinishReason)
+                .build();
+    }
+
+    @Override
     public String provider() {
         return "openai";
     }
 
-    private String buildRequestBody(LlmRequest request) throws IOException {
+    private String buildRequestBody(LlmRequest request, boolean stream) throws IOException {
         List<OpenAiMessage> messages = new ArrayList<>();
         boolean hasExplicitSystemPrompt = request.systemPrompt() != null && !request.systemPrompt().isBlank();
         if (hasExplicitSystemPrompt) {
@@ -129,6 +217,7 @@ public final class OpenAiAdapter implements LlmClient {
                 request.topP(),
                 request.frequencyPenalty(),
                 request.presencePenalty(),
+                stream ? true : null,
                 request.additionalParams()
         );
 
@@ -209,7 +298,7 @@ public final class OpenAiAdapter implements LlmClient {
         };
     }
 
-    private long parseRetryAfter(HttpResponse<String> response) {
+    private long parseRetryAfter(HttpResponse<?> response) {
         return response.headers()
                 .firstValue("retry-after")
                 .map(v -> {
@@ -239,12 +328,14 @@ public final class OpenAiAdapter implements LlmClient {
         private final Double frequencyPenalty;
         @JsonProperty("presence_penalty")
         private final Double presencePenalty;
+        @JsonProperty("stream")
+        private final Boolean stream;
 
         private final Map<String, Object> additionalParams;
 
         public OpenAiRequest(String model, Integer maxTokens, List<OpenAiMessage> messages,
                              Double temperature, Double topP, Double frequencyPenalty, Double presencePenalty,
-                             Map<String, Object> additionalParams) {
+                             Boolean stream, Map<String, Object> additionalParams) {
             this.model = model;
             this.maxTokens = maxTokens;
             this.messages = messages;
@@ -252,6 +343,7 @@ public final class OpenAiAdapter implements LlmClient {
             this.topP = topP;
             this.frequencyPenalty = frequencyPenalty;
             this.presencePenalty = presencePenalty;
+            this.stream = stream;
             this.additionalParams = additionalParams != null ? additionalParams : Map.of();
         }
 
@@ -262,6 +354,7 @@ public final class OpenAiAdapter implements LlmClient {
         public Double getTopP() { return topP; }
         public Double getFrequencyPenalty() { return frequencyPenalty; }
         public Double getPresencePenalty() { return presencePenalty; }
+        public Boolean getStream() { return stream; }
 
         @JsonAnyGetter
         public Map<String, Object> getAdditionalParams() {
@@ -270,6 +363,10 @@ public final class OpenAiAdapter implements LlmClient {
     }
 
     private record OpenAiMessage(String role, Object content) {}
+
+    private record StreamChunk(List<StreamChoice> choices) {}
+    private record StreamChoice(StreamDelta delta, @JsonProperty("finish_reason") String finishReason) {}
+    private record StreamDelta(String content) {}
 
     private record OpenAiResponse(
             String id,

@@ -175,6 +175,29 @@ try {
 
 ---
 
+## Real-Time Streaming & Token Callbacks
+
+Stream tokens in real time to UI components or Server-Sent Events (SSE) endpoints while preserving all quality, cost, and reliability guardrails:
+
+```java
+LlmRequest request = LlmRequest.builder(
+    "Write a short story about exploration.", 
+    "claude-3-5-sonnet-20241022"
+).build();
+
+// Tokens stream live to the consumer as they arrive from OpenAI or Anthropic
+LlmResponse response = pipeline.executeStreaming(request, token -> {
+    System.out.print(token);
+    System.out.flush();
+});
+
+// The returned LlmResponse contains full aggregated content, tokens, & estimated cost
+System.out.println("\nFinish reason: " + response.finishReason());
+System.out.println("Total cost: $" + response.estimatedCost());
+```
+
+---
+
 ## Non-Blocking & Reactive Integration
 
 Polity4j's `LlmPipeline.execute(request)` is completely thread-safe and stateless. It integrates seamlessly into high-throughput reactive frameworks and async execution environments without duplicating pipeline abstractions.

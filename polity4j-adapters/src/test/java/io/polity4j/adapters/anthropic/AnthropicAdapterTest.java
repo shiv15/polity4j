@@ -17,6 +17,7 @@ import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -279,6 +280,35 @@ class AnthropicAdapterTest {
         assertThat(captured).contains("\"media_type\":\"image/png\"");
         assertThat(captured).contains("\"type\":\"document\"");
         assertThat(captured).contains("\"media_type\":\"application/pdf\"");
+    }
+
+    @Test
+    void testStreamingSseResponse() {
+        String ssePayload = """
+                event: content_block_delta
+                data: {"type":"content_block_delta","delta":{"text":"Hello "}}
+
+                event: content_block_delta
+                data: {"type":"content_block_delta","delta":{"text":"Claude!"}}
+
+                event: message_delta
+                data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}
+                """;
+        responseStatus.set(200);
+        responseBody.set(ssePayload);
+
+        AnthropicAdapter adapter = new AnthropicAdapter(HttpClient.newHttpClient(), "test-key", serverUrl);
+        var tokens = new ArrayList<String>();
+        LlmRequest request = LlmRequest.builder("Hi", "claude-3-5-sonnet").build();
+
+        var response = adapter.callStreaming(request, tokens::add);
+
+        assertThat(tokens).containsExactly("Hello ", "Claude!");
+        assertThat(response.content()).isEqualTo("Hello Claude!");
+        assertThat(response.finishReason()).isEqualTo(FinishReason.STOP);
+
+        String captured = capturedRequestBody.get();
+        assertThat(captured).contains("\"stream\":true");
     }
 }
 

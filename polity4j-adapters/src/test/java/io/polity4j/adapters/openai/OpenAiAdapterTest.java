@@ -15,6 +15,7 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -251,6 +252,32 @@ class OpenAiAdapterTest {
         assertThat(captured).contains("\"type\":\"image_url\"");
         assertThat(captured).contains("\"url\":\"https://example.com/logo.png\"");
         assertThat(captured).contains("\"text\":\"Analyze this:\"");
+    }
+
+    @Test
+    void testStreamingSseResponse() {
+        String ssePayload = """
+                data: {"choices":[{"delta":{"content":"Hello "}}]}
+
+                data: {"choices":[{"delta":{"content":"world!"},"finish_reason":"stop"}]}
+
+                data: [DONE]
+                """;
+        responseStatus.set(200);
+        responseBody.set(ssePayload);
+
+        OpenAiAdapter adapter = new OpenAiAdapter(HttpClient.newHttpClient(), "test-key-openai", serverUrl);
+        var tokens = new ArrayList<String>();
+        LlmRequest request = LlmRequest.builder("Hi", "gpt-4o").build();
+
+        var response = adapter.callStreaming(request, tokens::add);
+
+        assertThat(tokens).containsExactly("Hello ", "world!");
+        assertThat(response.content()).isEqualTo("Hello world!");
+        assertThat(response.finishReason()).isEqualTo(FinishReason.STOP);
+
+        String captured = capturedRequestBody.get();
+        assertThat(captured).contains("\"stream\":true");
     }
 }
 

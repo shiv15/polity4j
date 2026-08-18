@@ -2,6 +2,8 @@ package io.polity4j.core;
 
 import io.polity4j.core.exception.PolityException;
 
+import java.util.function.Consumer;
+
 /**
  * The single interface every adapter implements.
  *
@@ -23,6 +25,25 @@ public interface LlmClient {
      *                         translated into the appropriate subtype
      */
     LlmResponse call(LlmRequest request) throws PolityException;
+
+    /**
+     * Execute one AI call with real-time token streaming.
+     *
+     * Chunks are emitted to tokenHandler as they arrive.
+     * Returns the aggregated final response when complete.
+     *
+     * @param request the fully prepared request
+     * @param tokenHandler consumer receiving each generated token string
+     * @return the aggregated provider response
+     * @throws PolityException any provider or infrastructure failure
+     */
+    default LlmResponse callStreaming(LlmRequest request, Consumer<String> tokenHandler) throws PolityException {
+        LlmResponse response = call(request);
+        if (tokenHandler != null && response.content() != null) {
+            tokenHandler.accept(response.content());
+        }
+        return response;
+    }
 
     /**
      * The provider name this client connects to.

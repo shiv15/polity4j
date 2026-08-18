@@ -250,4 +250,37 @@ class LlmPipelineTest {
         var response = pipeline.execute(LlmRequest.builder("start", "gpt-4o").build());
         assertThat(response.content()).isEqualTo("B");
     }
+
+    @Test
+    void executeStreamingFiresTokenConsumerAndReturnsFullResponse() throws PolityException {
+        LlmClient streamingClient = new LlmClient() {
+            @Override
+            public LlmResponse call(LlmRequest request) throws PolityException {
+                return LlmResponse.builder("Full fallback text", request.model(), provider()).build();
+            }
+
+            @Override
+            public LlmResponse callStreaming(LlmRequest request, java.util.function.Consumer<String> tokenHandler) throws PolityException {
+                tokenHandler.accept("Hello ");
+                tokenHandler.accept("world!");
+                return LlmResponse.builder("Hello world!", request.model(), provider()).build();
+            }
+
+            @Override
+            public String provider() {
+                return "streaming-stub";
+            }
+        };
+
+        var pipeline = LlmPipeline.builder(streamingClient).build();
+        var chunks = new ArrayList<String>();
+
+        var response = pipeline.executeStreaming(
+                LlmRequest.builder("Hi", "gpt-4o").build(),
+                chunks::add
+        );
+
+        assertThat(chunks).containsExactly("Hello ", "world!");
+        assertThat(response.content()).isEqualTo("Hello world!");
+    }
 }

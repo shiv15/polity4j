@@ -71,7 +71,7 @@ public final class AnthropicAdapter implements LlmClient {
         // Format message request
         String requestBody;
         try {
-            requestBody = buildRequestBody(request);
+            requestBody = buildRequestBody(request, false);
         } catch (IOException e) {
             throw new ModelUnavailableException(request.model(), provider(), new RuntimeException("Failed to serialize request to JSON", e));
         }
@@ -110,11 +110,96 @@ public final class AnthropicAdapter implements LlmClient {
     }
 
     @Override
+    public LlmResponse callStreaming(LlmRequest request, java.util.function.Consumer<String> tokenHandler) throws PolityException {
+        Objects.requireNonNull(request, "request must not be null");
+
+        String requestBody;
+        try {
+            requestBody = buildRequestBody(request, true);
+        } catch (IOException e) {
+            throw new ModelUnavailableException(request.model(), provider(), new RuntimeException("Failed to serialize request to JSON", e));
+        }
+
+        HttpRequest httpRequest = HttpRequest.newBuilder()
+                .uri(URI.create(apiUrl))
+                .header("Content-Type", "application/json")
+                .header("x-api-key", apiKey)
+                .header(ANTHROPIC_VERSION_HEADER, ANTHROPIC_VERSION)
+                .timeout(Duration.ofSeconds(60))
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                .build();
+
+        long startTime = System.currentTimeMillis();
+        HttpResponse<java.util.stream.Stream<String>> httpResponse;
+        try {
+            httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofLines());
+        } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            throw new ModelUnavailableException(request.model(), provider(), new RuntimeException("HTTP call interrupted or connection failed", e));
+        }
+        long latencyMs = System.currentTimeMillis() - startTime;
+
+        int statusCode = httpResponse.statusCode();
+        if (statusCode != 200) {
+            if (statusCode == 429) {
+                throw new RateLimitException(provider(), parseRetryAfter(httpResponse));
+            }
+            if (statusCode == 529) {
+                throw new OverloadedException(provider());
+            }
+            throw new ModelUnavailableException(request.model(), provider(), new RuntimeException("Unexpected status: " + statusCode));
+        }
+
+        StringBuilder fullContent = new StringBuilder();
+        FinishReason finalFinishReason = FinishReason.STOP;
+
+        try (var lines = httpResponse.body()) {
+            for (String line : (Iterable<String>) lines::iterator) {
+                if (line == null || line.isBlank()) continue;
+                String trimmed = line.trim();
+                if (!trimmed.startsWith("data:")) continue;
+                String data = trimmed.substring(5).trim();
+
+                try {
+                    AnthropicStreamEvent event = objectMapper.readValue(data, AnthropicStreamEvent.class);
+                    if ("content_block_delta".equalsIgnoreCase(event.type()) && event.delta() != null && event.delta().text() != null) {
+                        String token = event.delta().text();
+                        fullContent.append(token);
+                        if (tokenHandler != null) {
+                            tokenHandler.accept(token);
+                        }
+                    } else if ("message_delta".equalsIgnoreCase(event.type()) && event.delta() != null && event.delta().stopReason() != null) {
+                        finalFinishReason = parseFinishReason(event.delta().stopReason());
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
+        String contentText = fullContent.toString();
+        int inputTokens = request.prompt().length() / 4;
+        int outputTokens = contentText.length() / 4;
+
+        BigDecimal estimatedCost = BigDecimal.valueOf(inputTokens).multiply(new BigDecimal("0.000003"))
+                .add(BigDecimal.valueOf(outputTokens).multiply(new BigDecimal("0.000015")));
+
+        return LlmResponse.builder(contentText, request.model(), provider())
+                .inputTokens(inputTokens)
+                .outputTokens(outputTokens)
+                .estimatedCost(estimatedCost)
+                .latencyMs(latencyMs)
+                .finishReason(finalFinishReason)
+                .build();
+    }
+
+    @Override
     public String provider() {
         return "anthropic";
     }
 
-    private String buildRequestBody(LlmRequest request) throws IOException {
+    private String buildRequestBody(LlmRequest request, boolean stream) throws IOException {
         String systemPrompt = request.systemPrompt();
         if (systemPrompt == null || systemPrompt.isBlank()) {
             systemPrompt = request.conversationHistory().stream()
@@ -138,6 +223,7 @@ public final class AnthropicAdapter implements LlmClient {
                 messages,
                 request.temperature(),
                 request.topP(),
+                stream ? true : null,
                 request.additionalParams()
         );
 
@@ -222,7 +308,7 @@ public final class AnthropicAdapter implements LlmClient {
         };
     }
 
-    private long parseRetryAfter(HttpResponse<String> response) {
+    private long parseRetryAfter(HttpResponse<?> response) {
         return response.headers()
                 .firstValue("retry-after")
                 .map(v -> {
@@ -250,17 +336,20 @@ public final class AnthropicAdapter implements LlmClient {
         private final Double temperature;
         @JsonProperty("top_p")
         private final Double topP;
+        @JsonProperty("stream")
+        private final Boolean stream;
 
         private final Map<String, Object> additionalParams;
 
         public AnthropicRequest(String model, int maxTokens, String system, List<AnthropicMessage> messages,
-                                Double temperature, Double topP, Map<String, Object> additionalParams) {
+                                Double temperature, Double topP, Boolean stream, Map<String, Object> additionalParams) {
             this.model = model;
             this.maxTokens = maxTokens;
             this.system = system;
             this.messages = messages;
             this.temperature = temperature;
             this.topP = topP;
+            this.stream = stream;
             this.additionalParams = additionalParams != null ? additionalParams : Map.of();
         }
 
@@ -270,6 +359,7 @@ public final class AnthropicAdapter implements LlmClient {
         public List<AnthropicMessage> getMessages() { return messages; }
         public Double getTemperature() { return temperature; }
         public Double getTopP() { return topP; }
+        public Boolean getStream() { return stream; }
 
         @JsonAnyGetter
         public Map<String, Object> getAdditionalParams() {
@@ -278,6 +368,9 @@ public final class AnthropicAdapter implements LlmClient {
     }
 
     private record AnthropicMessage(String role, Object content) {}
+
+    private record AnthropicStreamEvent(String type, AnthropicStreamDelta delta) {}
+    private record AnthropicStreamDelta(String type, String text, @JsonProperty("stop_reason") String stopReason) {}
 
     private record AnthropicResponse(
             String id,

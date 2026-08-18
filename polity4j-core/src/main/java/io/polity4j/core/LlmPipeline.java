@@ -50,7 +50,22 @@ public final class LlmPipeline {
      */
     public LlmResponse execute(LlmRequest request) throws PolityException {
         Objects.requireNonNull(request, "request must not be null");
-        PipelineChain chain = buildChain();
+        PipelineChain chain = buildChain(null);
+        return chain.proceed(request);
+    }
+
+    /**
+     * Execute the pipeline for one request with real-time streaming tokens.
+     *
+     * @param request the request to process
+     * @param tokenHandler consumer receiving each generated token chunk in real time
+     * @return the aggregated response
+     * @throws PolityException if any module or client fails
+     */
+    public LlmResponse executeStreaming(LlmRequest request, java.util.function.Consumer<String> tokenHandler) throws PolityException {
+        Objects.requireNonNull(request, "request must not be null");
+        Objects.requireNonNull(tokenHandler, "tokenHandler must not be null");
+        PipelineChain chain = buildChain(tokenHandler);
         return chain.proceed(request);
     }
 
@@ -71,9 +86,11 @@ public final class LlmPipeline {
      * Calling the final chain invokes A, which may invoke B, which
      * may invoke C, which may invoke K.
      */
-    private PipelineChain buildChain() {
-        // Terminal: the actual API call
-        PipelineChain chain = request -> client.call(request);
+    private PipelineChain buildChain(java.util.function.Consumer<String> tokenHandler) {
+        // Terminal: the actual API call (streaming or non-streaming)
+        PipelineChain chain = tokenHandler == null
+                ? request -> client.call(request)
+                : request -> client.callStreaming(request, tokenHandler);
 
         // Wrap right-to-left
         for (int i = modules.size() - 1; i >= 0; i--) {

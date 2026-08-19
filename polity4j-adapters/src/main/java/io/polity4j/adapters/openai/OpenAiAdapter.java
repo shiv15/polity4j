@@ -10,6 +10,8 @@ import io.polity4j.core.FinishReason;
 import io.polity4j.core.LlmClient;
 import io.polity4j.core.LlmRequest;
 import io.polity4j.core.LlmResponse;
+import io.polity4j.core.ToolCall;
+import io.polity4j.core.ToolSpec;
 import io.polity4j.core.exception.ModelUnavailableException;
 import io.polity4j.core.exception.PolityException;
 import io.polity4j.core.exception.RateLimitException;
@@ -209,6 +211,21 @@ public final class OpenAiAdapter implements LlmClient {
         }
         messages.add(new OpenAiMessage("user", request.prompt()));
 
+        List<Map<String, Object>> openAiTools = null;
+        if (request.tools() != null && !request.tools().isEmpty()) {
+            openAiTools = new ArrayList<>();
+            for (ToolSpec spec : request.tools()) {
+                openAiTools.add(Map.of(
+                        "type", "function",
+                        "function", Map.of(
+                                "name", spec.name(),
+                                "description", spec.description(),
+                                "parameters", spec.parameters()
+                        )
+                ));
+            }
+        }
+
         OpenAiRequest apiRequest = new OpenAiRequest(
                 request.model(),
                 request.maxTokens() > 0 ? request.maxTokens() : null,
@@ -218,6 +235,7 @@ public final class OpenAiAdapter implements LlmClient {
                 request.frequencyPenalty(),
                 request.presencePenalty(),
                 stream ? true : null,
+                openAiTools,
                 request.additionalParams()
         );
 
@@ -262,6 +280,20 @@ public final class OpenAiAdapter implements LlmClient {
             }
 
             String contentText = choice.message().content() != null ? choice.message().content().toString() : "";
+            List<ToolCall> toolCalls = new ArrayList<>();
+            if (choice.message().toolCalls() != null) {
+                for (var tc : choice.message().toolCalls()) {
+                    Map<String, Object> argsMap = Map.of();
+                    if (tc.function() != null && tc.function().arguments() != null) {
+                        try {
+                            argsMap = objectMapper.readValue(tc.function().arguments(), new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    toolCalls.add(new ToolCall(tc.id() != null ? tc.id() : "", tc.function() != null ? tc.function().name() : "", argsMap));
+                }
+            }
+
             int inputTokens = 0;
             int outputTokens = 0;
             if (response.usage() != null) {
@@ -273,12 +305,18 @@ public final class OpenAiAdapter implements LlmClient {
             BigDecimal estimatedCost = BigDecimal.valueOf(inputTokens).multiply(new BigDecimal("0.0000025"))
                     .add(BigDecimal.valueOf(outputTokens).multiply(new BigDecimal("0.000010")));
 
+            FinishReason finishReason = parseFinishReason(choice.finishReason());
+            if (!toolCalls.isEmpty() && finishReason == FinishReason.UNKNOWN) {
+                finishReason = FinishReason.TOOL_CALLS;
+            }
+
             return LlmResponse.builder(contentText, model, provider())
                     .inputTokens(inputTokens)
                     .outputTokens(outputTokens)
                     .estimatedCost(estimatedCost)
                     .latencyMs(latencyMs)
-                    .finishReason(parseFinishReason(choice.finishReason()))
+                    .finishReason(finishReason)
+                    .toolCalls(toolCalls)
                     .build();
         } catch (IOException e) {
             throw new ModelUnavailableException(model, provider(), new RuntimeException("Failed to deserialize OpenAI success payload", e));
@@ -330,12 +368,14 @@ public final class OpenAiAdapter implements LlmClient {
         private final Double presencePenalty;
         @JsonProperty("stream")
         private final Boolean stream;
+        @JsonProperty("tools")
+        private final List<Map<String, Object>> tools;
 
         private final Map<String, Object> additionalParams;
 
         public OpenAiRequest(String model, Integer maxTokens, List<OpenAiMessage> messages,
                              Double temperature, Double topP, Double frequencyPenalty, Double presencePenalty,
-                             Boolean stream, Map<String, Object> additionalParams) {
+                             Boolean stream, List<Map<String, Object>> tools, Map<String, Object> additionalParams) {
             this.model = model;
             this.maxTokens = maxTokens;
             this.messages = messages;
@@ -344,6 +384,7 @@ public final class OpenAiAdapter implements LlmClient {
             this.frequencyPenalty = frequencyPenalty;
             this.presencePenalty = presencePenalty;
             this.stream = stream;
+            this.tools = tools;
             this.additionalParams = additionalParams != null ? additionalParams : Map.of();
         }
 
@@ -355,6 +396,7 @@ public final class OpenAiAdapter implements LlmClient {
         public Double getFrequencyPenalty() { return frequencyPenalty; }
         public Double getPresencePenalty() { return presencePenalty; }
         public Boolean getStream() { return stream; }
+        public List<Map<String, Object>> getTools() { return tools; }
 
         @JsonAnyGetter
         public Map<String, Object> getAdditionalParams() {
@@ -362,7 +404,15 @@ public final class OpenAiAdapter implements LlmClient {
         }
     }
 
-    private record OpenAiMessage(String role, Object content) {}
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private record OpenAiMessage(String role, Object content, @JsonProperty("tool_calls") List<OpenAiToolCallDto> toolCalls) {
+        public OpenAiMessage(String role, Object content) {
+            this(role, content, null);
+        }
+    }
+
+    private record OpenAiToolCallDto(String id, String type, OpenAiFunctionDto function) {}
+    private record OpenAiFunctionDto(String name, String arguments) {}
 
     private record StreamChunk(List<StreamChoice> choices) {}
     private record StreamChoice(StreamDelta delta, @JsonProperty("finish_reason") String finishReason) {}

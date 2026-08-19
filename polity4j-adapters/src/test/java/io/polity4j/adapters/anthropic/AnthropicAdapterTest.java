@@ -310,5 +310,43 @@ class AnthropicAdapterTest {
         String captured = capturedRequestBody.get();
         assertThat(captured).contains("\"stream\":true");
     }
+
+    @Test
+    void testToolCallingResponse() throws Exception {
+        String jsonPayload = """
+                {
+                  "id": "msg_123",
+                  "type": "message",
+                  "role": "assistant",
+                  "model": "claude-3-5-sonnet",
+                  "content": [
+                    {
+                      "type": "tool_use",
+                      "id": "toolu_01",
+                      "name": "get_weather",
+                      "input": { "location": "NYC" }
+                    }
+                  ],
+                  "stop_reason": "tool_use",
+                  "usage": { "input_tokens": 15, "output_tokens": 8 }
+                }
+                """;
+        responseStatus.set(200);
+        responseBody.set(jsonPayload);
+
+        AnthropicAdapter adapter = new AnthropicAdapter(HttpClient.newHttpClient(), "test-key", serverUrl);
+        var spec = io.polity4j.core.ToolSpec.of("get_weather", "Get weather", java.util.Map.of());
+        LlmRequest request = LlmRequest.builder("What is the weather?", "claude-3-5-sonnet")
+                .tool(spec)
+                .build();
+
+        LlmResponse response = adapter.call(request);
+
+        assertThat(response.finishReason()).isEqualTo(FinishReason.TOOL_CALLS);
+        assertThat(response.toolCalls()).hasSize(1);
+        assertThat(response.toolCalls().get(0).name()).isEqualTo("get_weather");
+        assertThat(response.toolCalls().get(0).arguments()).containsEntry("location", "NYC");
+        assertThat(capturedRequestBody.get()).contains("\"tools\":[");
+    }
 }
 

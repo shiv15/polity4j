@@ -198,6 +198,37 @@ System.out.println("Total cost: $" + response.estimatedCost());
 
 ---
 
+## Tool Definitions & Automated Function Calling
+
+Polity4j provides first-class support for function calling and automated tool execution loops without unsafe reflection risks:
+
+```java
+public class StockService {
+    @PolityTool(name = "get_stock_level", description = "Get remaining stock for a SKU")
+    public String getStock(String sku) {
+        return "48 units available";
+    }
+}
+
+// 1. Explicitly register tool handlers (avoids prompt-injection RCE vulnerabilities)
+ToolRegistry registry = ToolRegistry.builder()
+    .registerBean(new StockService())
+    .build();
+
+// 2. Attach ToolExecutionModule to auto-resolve tool calls up to maxDepth
+LlmPipeline pipeline = LlmPipeline.builder(adapter)
+    .with(new ToolExecutionModule(registry))
+    .build();
+
+// 3. Send request — model requests tool, Polity4j executes it & returns final result
+LlmResponse response = pipeline.execute(LlmRequest.builder(
+    "Check stock level for SKU-779", "gpt-4o").build());
+
+System.out.println(response.content());
+```
+
+---
+
 ## Non-Blocking & Reactive Integration
 
 Polity4j's `LlmPipeline.execute(request)` is completely thread-safe and stateless. It integrates seamlessly into high-throughput reactive frameworks and async execution environments without duplicating pipeline abstractions.

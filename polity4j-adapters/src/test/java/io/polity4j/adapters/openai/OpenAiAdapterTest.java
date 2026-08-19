@@ -279,5 +279,48 @@ class OpenAiAdapterTest {
         String captured = capturedRequestBody.get();
         assertThat(captured).contains("\"stream\":true");
     }
+
+    @Test
+    void testToolCallingResponse() throws Exception {
+        String jsonPayload = """
+                {
+                  "id": "chatcmpl-123",
+                  "object": "chat.completion",
+                  "choices": [{
+                    "index": 0,
+                    "message": {
+                      "role": "assistant",
+                      "content": null,
+                      "tool_calls": [{
+                        "id": "call_abc123",
+                        "type": "function",
+                        "function": {
+                          "name": "get_weather",
+                          "arguments": "{\\"location\\": \\"NYC\\"}"
+                        }
+                      }]
+                    },
+                    "finish_reason": "tool_calls"
+                  }],
+                  "usage": { "prompt_tokens": 20, "completion_tokens": 10, "total_tokens": 30 }
+                }
+                """;
+        responseStatus.set(200);
+        responseBody.set(jsonPayload);
+
+        OpenAiAdapter adapter = new OpenAiAdapter(HttpClient.newHttpClient(), "test-key-openai", serverUrl);
+        var spec = io.polity4j.core.ToolSpec.of("get_weather", "Get weather", java.util.Map.of());
+        LlmRequest request = LlmRequest.builder("What is the weather?", "gpt-4o")
+                .tool(spec)
+                .build();
+
+        LlmResponse response = adapter.call(request);
+
+        assertThat(response.finishReason()).isEqualTo(FinishReason.TOOL_CALLS);
+        assertThat(response.toolCalls()).hasSize(1);
+        assertThat(response.toolCalls().get(0).name()).isEqualTo("get_weather");
+        assertThat(response.toolCalls().get(0).arguments()).containsEntry("location", "NYC");
+        assertThat(capturedRequestBody.get()).contains("\"tools\":[");
+    }
 }
 

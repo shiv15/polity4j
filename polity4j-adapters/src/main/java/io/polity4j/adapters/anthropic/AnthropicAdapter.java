@@ -10,6 +10,8 @@ import io.polity4j.core.FinishReason;
 import io.polity4j.core.LlmClient;
 import io.polity4j.core.LlmRequest;
 import io.polity4j.core.LlmResponse;
+import io.polity4j.core.ToolCall;
+import io.polity4j.core.ToolSpec;
 import io.polity4j.core.exception.ModelUnavailableException;
 import io.polity4j.core.exception.OverloadedException;
 import io.polity4j.core.exception.PolityException;
@@ -218,6 +220,18 @@ public final class AnthropicAdapter implements LlmClient {
         // Add the current prompt turn
         messages.add(new AnthropicMessage("user", request.prompt()));
 
+        List<Map<String, Object>> anthropicTools = null;
+        if (request.tools() != null && !request.tools().isEmpty()) {
+            anthropicTools = new ArrayList<>();
+            for (ToolSpec spec : request.tools()) {
+                anthropicTools.add(Map.of(
+                        "name", spec.name(),
+                        "description", spec.description(),
+                        "input_schema", spec.parameters()
+                ));
+            }
+        }
+
         AnthropicRequest apiRequest = new AnthropicRequest(
                 request.model(),
                 request.maxTokens(),
@@ -226,6 +240,7 @@ public final class AnthropicAdapter implements LlmClient {
                 request.temperature(),
                 request.topP(),
                 stream ? true : null,
+                anthropicTools,
                 request.additionalParams()
         );
 
@@ -274,7 +289,22 @@ public final class AnthropicAdapter implements LlmClient {
                 throw new ModelUnavailableException(model, provider(), new RuntimeException("Response returned empty content array: " + body));
             }
 
-            String contentText = response.content().get(0).text();
+            StringBuilder contentBuilder = new StringBuilder();
+            List<ToolCall> toolCalls = new ArrayList<>();
+
+            for (var block : response.content()) {
+                if ("text".equalsIgnoreCase(block.type()) && block.text() != null) {
+                    contentBuilder.append(block.text());
+                } else if ("tool_use".equalsIgnoreCase(block.type())) {
+                    toolCalls.add(new ToolCall(
+                            block.id() != null ? block.id() : "",
+                            block.name() != null ? block.name() : "",
+                            block.input() != null ? block.input() : Map.of()
+                    ));
+                }
+            }
+
+            String contentText = contentBuilder.toString();
             int inputTokens = 0;
             int outputTokens = 0;
             if (response.usage() != null) {
@@ -286,12 +316,18 @@ public final class AnthropicAdapter implements LlmClient {
             BigDecimal estimatedCost = BigDecimal.valueOf(inputTokens).multiply(new BigDecimal("0.000003"))
                     .add(BigDecimal.valueOf(outputTokens).multiply(new BigDecimal("0.000015")));
 
+            FinishReason finishReason = parseFinishReason(response.stopReason());
+            if (!toolCalls.isEmpty() && finishReason == FinishReason.UNKNOWN) {
+                finishReason = FinishReason.TOOL_CALLS;
+            }
+
             return LlmResponse.builder(contentText, model, provider())
                     .inputTokens(inputTokens)
                     .outputTokens(outputTokens)
                     .estimatedCost(estimatedCost)
                     .latencyMs(latencyMs)
-                    .finishReason(parseFinishReason(response.stopReason()))
+                    .finishReason(finishReason)
+                    .toolCalls(toolCalls)
                     .build();
         } catch (IOException e) {
             throw new ModelUnavailableException(model, provider(), new RuntimeException("Failed to deserialize Anthropic success payload", e));
@@ -340,11 +376,14 @@ public final class AnthropicAdapter implements LlmClient {
         private final Double topP;
         @JsonProperty("stream")
         private final Boolean stream;
+        @JsonProperty("tools")
+        private final List<Map<String, Object>> tools;
 
         private final Map<String, Object> additionalParams;
 
         public AnthropicRequest(String model, int maxTokens, String system, List<AnthropicMessage> messages,
-                                Double temperature, Double topP, Boolean stream, Map<String, Object> additionalParams) {
+                                Double temperature, Double topP, Boolean stream, List<Map<String, Object>> tools,
+                                Map<String, Object> additionalParams) {
             this.model = model;
             this.maxTokens = maxTokens;
             this.system = system;
@@ -352,6 +391,7 @@ public final class AnthropicAdapter implements LlmClient {
             this.temperature = temperature;
             this.topP = topP;
             this.stream = stream;
+            this.tools = tools;
             this.additionalParams = additionalParams != null ? additionalParams : Map.of();
         }
 
@@ -362,6 +402,7 @@ public final class AnthropicAdapter implements LlmClient {
         public Double getTemperature() { return temperature; }
         public Double getTopP() { return topP; }
         public Boolean getStream() { return stream; }
+        public List<Map<String, Object>> getTools() { return tools; }
 
         @JsonAnyGetter
         public Map<String, Object> getAdditionalParams() {
@@ -371,20 +412,26 @@ public final class AnthropicAdapter implements LlmClient {
 
     private record AnthropicMessage(String role, Object content) {}
 
-    private record AnthropicStreamEvent(String type, AnthropicStreamDelta delta) {}
-    private record AnthropicStreamDelta(String type, String text, @JsonProperty("stop_reason") String stopReason) {}
+    private record AnthropicStreamEvent(String type, AnthropicDelta delta) {}
+    private record AnthropicDelta(String text, @JsonProperty("stop_reason") String stopReason) {}
 
     private record AnthropicResponse(
             String id,
             String type,
             String role,
-            List<AnthropicContent> content,
             String model,
+            List<ContentBlock> content,
             @JsonProperty("stop_reason") String stopReason,
             Usage usage
     ) {}
 
-    private record AnthropicContent(String type, String text) {}
+    private record ContentBlock(
+            String type,
+            String text,
+            String id,
+            String name,
+            Map<String, Object> input
+    ) {}
 
     private record Usage(
             @JsonProperty("input_tokens") int inputTokens,

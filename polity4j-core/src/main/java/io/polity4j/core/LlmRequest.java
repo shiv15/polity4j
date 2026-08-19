@@ -23,7 +23,8 @@ public record LlmRequest(
         Double frequencyPenalty,
         Double presencePenalty,
         Map<String, Object> additionalParams,
-        String systemPrompt
+        String systemPrompt,
+        List<ToolSpec> tools
 ) {
 
     public record Message(String role, List<ContentPart> parts) {
@@ -68,14 +69,15 @@ public record LlmRequest(
         additionalParams = additionalParams == null
                 ? Map.of()
                 : Map.copyOf(additionalParams);
+        tools = tools == null ? List.of() : List.copyOf(tools);
     }
 
     public LlmRequest(String prompt, String model, int maxTokens, String callerId, String regionContext, List<Message> conversationHistory) {
-        this(prompt, model, maxTokens, callerId, regionContext, conversationHistory, null, null, null, null, Map.of(), null);
+        this(prompt, model, maxTokens, callerId, regionContext, conversationHistory, null, null, null, null, Map.of(), null, List.of());
     }
 
     public LlmRequest(String prompt, String model, int maxTokens, String callerId, String regionContext, List<Message> conversationHistory, Double temperature, Double topP, Double frequencyPenalty, Double presencePenalty, Map<String, Object> additionalParams) {
-        this(prompt, model, maxTokens, callerId, regionContext, conversationHistory, temperature, topP, frequencyPenalty, presencePenalty, additionalParams, null);
+        this(prompt, model, maxTokens, callerId, regionContext, conversationHistory, temperature, topP, frequencyPenalty, presencePenalty, additionalParams, null, List.of());
     }
 
     public static Builder builder(String prompt, String model) {
@@ -88,13 +90,14 @@ public record LlmRequest(
         private int maxTokens = 1024;
         private String callerId;
         private String regionContext;
-        private List<Message> conversationHistory;
+        private List<Message> conversationHistory = List.of();
         private Double temperature;
         private Double topP;
         private Double frequencyPenalty;
         private Double presencePenalty;
-        private Map<String, Object> additionalParams = new HashMap<>();
+        private final Map<String, Object> additionalParams = new HashMap<>();
         private String systemPrompt;
+        private List<ToolSpec> tools = List.of();
 
         private Builder(String prompt, String model) {
             this.prompt = prompt;
@@ -159,13 +162,25 @@ public record LlmRequest(
             return this;
         }
 
+        public Builder tools(List<ToolSpec> tools) {
+            this.tools = tools != null ? List.copyOf(tools) : List.of();
+            return this;
+        }
+
+        public Builder tool(ToolSpec tool) {
+            Objects.requireNonNull(tool, "tool must not be null");
+            var list = new java.util.ArrayList<>(this.tools);
+            list.add(tool);
+            this.tools = List.copyOf(list);
+            return this;
+        }
+
         public LlmRequest build() {
             return new LlmRequest(
                     prompt, model, maxTokens,
                     callerId, regionContext, conversationHistory,
                     temperature, topP, frequencyPenalty, presencePenalty,
-                    additionalParams, systemPrompt);
+                    additionalParams, systemPrompt, tools);
         }
     }
 }
-

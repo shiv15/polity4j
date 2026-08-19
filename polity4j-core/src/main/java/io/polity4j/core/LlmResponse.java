@@ -1,6 +1,7 @@
 package io.polity4j.core;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -16,6 +17,7 @@ import java.util.Objects;
  * @param estimatedCost Calculated estimated financial cost for this call.
  * @param latencyMs Call duration in milliseconds.
  * @param finishReason The reason why generation finished (e.g. STOP, LENGTH, CONTENT_FILTER, TOOL_CALLS).
+ * @param toolCalls The tool calls requested by the model.
  */
 public record LlmResponse(
         String content,
@@ -25,7 +27,8 @@ public record LlmResponse(
         int outputTokens,
         BigDecimal estimatedCost,
         long latencyMs,
-        FinishReason finishReason
+        FinishReason finishReason,
+        List<ToolCall> toolCalls
 ) {
 
     public LlmResponse {
@@ -37,10 +40,15 @@ public record LlmResponse(
         if (outputTokens < 0) throw new IllegalArgumentException("outputTokens must not be negative");
         if (latencyMs < 0) throw new IllegalArgumentException("latencyMs must not be negative");
         finishReason = finishReason == null ? FinishReason.UNKNOWN : finishReason;
+        toolCalls = toolCalls == null ? List.of() : List.copyOf(toolCalls);
+    }
+
+    public LlmResponse(String content, String model, String provider, int inputTokens, int outputTokens, BigDecimal estimatedCost, long latencyMs, FinishReason finishReason) {
+        this(content, model, provider, inputTokens, outputTokens, estimatedCost, latencyMs, finishReason, List.of());
     }
 
     public LlmResponse(String content, String model, String provider, int inputTokens, int outputTokens, BigDecimal estimatedCost, long latencyMs) {
-        this(content, model, provider, inputTokens, outputTokens, estimatedCost, latencyMs, FinishReason.UNKNOWN);
+        this(content, model, provider, inputTokens, outputTokens, estimatedCost, latencyMs, FinishReason.UNKNOWN, List.of());
     }
 
     public int totalTokens() {
@@ -60,11 +68,12 @@ public record LlmResponse(
         private BigDecimal estimatedCost = BigDecimal.ZERO;
         private long latencyMs;
         private FinishReason finishReason = FinishReason.UNKNOWN;
+        private List<ToolCall> toolCalls = List.of();
 
         private Builder(String content, String model, String provider) {
-            this.content = content;
-            this.model = model;
-            this.provider = provider;
+            this.content = Objects.requireNonNull(content, "content must not be null");
+            this.model = Objects.requireNonNull(model, "model must not be null");
+            this.provider = Objects.requireNonNull(provider, "provider must not be null");
         }
 
         public Builder inputTokens(int inputTokens) {
@@ -92,12 +101,16 @@ public record LlmResponse(
             return this;
         }
 
+        public Builder toolCalls(List<ToolCall> toolCalls) {
+            this.toolCalls = toolCalls != null ? List.copyOf(toolCalls) : List.of();
+            return this;
+        }
+
         public LlmResponse build() {
             return new LlmResponse(
                     content, model, provider,
                     inputTokens, outputTokens,
-                    estimatedCost, latencyMs, finishReason);
+                    estimatedCost, latencyMs, finishReason, toolCalls);
         }
     }
 }
-

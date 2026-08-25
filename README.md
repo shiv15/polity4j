@@ -229,6 +229,27 @@ System.out.println(response.content());
 
 ---
 
+## Structured Output & Typed Deserialization
+
+Extract typed Java Records or POJOs directly with automated prompt schema injection and auto-corrective syntax retries:
+
+```java
+public record UserProfile(String name, int age, String email) {}
+
+// 1. Wrap LlmPipeline in StructuredOutputPipeline for type T
+StructuredOutputPipeline<UserProfile> structuredPipeline = 
+    StructuredOutputPipeline.of(pipeline, UserProfile.class);
+
+// 2. Execute request — receives typed result directly
+StructuredResult<UserProfile> result = structuredPipeline.execute(
+    LlmRequest.builder("Extract user profile for Alice, 30", "gpt-4o").build());
+
+UserProfile profile = result.value();
+System.out.println("User: " + profile.name() + ", Age: " + profile.age());
+```
+
+---
+
 ## Non-Blocking & Reactive Integration
 
 Polity4j's `LlmPipeline.execute(request)` is completely thread-safe and stateless. It integrates seamlessly into high-throughput reactive frameworks and async execution environments without duplicating pipeline abstractions.

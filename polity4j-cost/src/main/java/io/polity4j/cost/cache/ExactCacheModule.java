@@ -6,49 +6,46 @@ import io.polity4j.core.PipelineChain;
 import io.polity4j.core.PipelineModule;
 import io.polity4j.core.exception.PolityException;
 
-import java.util.concurrent.ConcurrentHashMap;
+import java.time.Duration;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Exact match cache — returns a cached response when the request
  * has been seen before, skipping the API call entirely.
  *
- * Cache key: SHA-256(model + prompt + conversationHistory)
- * See CacheKey for field inclusion rationale.
- *
- * Thread safety: ConcurrentHashMap for the store, AtomicLong for
- * hit/miss counters. All operations are lock-free.
- *
- * This is an in-memory cache — entries are lost on restart.
- * The SaaS platform provides a distributed persistent cache
- * for multi-instance deployments.
- *
- * On a cache hit:
- *   - Returns the cached LlmResponse immediately
- *   - Does NOT call next — the API call is skipped entirely
- *   - Fires CacheEventListener.onCacheHit() for observability
- *
- * On a cache miss:
- *   - Calls next to get a real response
- *   - Stores the response in the cache for future hits
- *   - Fires CacheEventListener.onCacheMiss() for observability
+ * Delegated storage provider: CacheStore (e.g. InMemoryCacheStore, CaffeineCacheStore).
  */
 public final class ExactCacheModule implements PipelineModule {
 
-    private final ConcurrentHashMap<CacheKey, CacheEntry> store =
-            new ConcurrentHashMap<>();
+    private final CacheStore store;
+    private final CacheEventListener listener;
+    private final Duration defaultTtl;
 
     private final AtomicLong hits = new AtomicLong(0);
     private final AtomicLong misses = new AtomicLong(0);
 
-    private final CacheEventListener listener;
-
     public ExactCacheModule() {
-        this(CacheEventListener.noOp());
+        this(new InMemoryCacheStore(), CacheEventListener.noOp(), null);
+    }
+
+    public ExactCacheModule(CacheStore store) {
+        this(store, CacheEventListener.noOp(), null);
     }
 
     public ExactCacheModule(CacheEventListener listener) {
-        this.listener = listener;
+        this(new InMemoryCacheStore(), listener, null);
+    }
+
+    public ExactCacheModule(CacheStore store, CacheEventListener listener) {
+        this(store, listener, null);
+    }
+
+    public ExactCacheModule(CacheStore store, CacheEventListener listener, Duration defaultTtl) {
+        this.store = Objects.requireNonNull(store, "store must not be null");
+        this.listener = Objects.requireNonNull(listener, "listener must not be null");
+        this.defaultTtl = defaultTtl;
     }
 
     @Override
@@ -56,9 +53,10 @@ public final class ExactCacheModule implements PipelineModule {
             throws PolityException {
 
         CacheKey key = CacheKey.from(request);
-        CacheEntry entry = store.get(key);
+        Optional<CacheEntry> entryOpt = store.get(key);
 
-        if (entry != null) {
+        if (entryOpt.isPresent()) {
+            CacheEntry entry = entryOpt.get();
             hits.incrementAndGet();
             listener.onCacheHit(request, entry);
             return entry.response();
@@ -69,7 +67,12 @@ public final class ExactCacheModule implements PipelineModule {
         LlmResponse response = next.proceed(request);
 
         // Store for future hits
-        store.put(key, CacheEntry.of(response));
+        CacheEntry entry = CacheEntry.of(response);
+        if (defaultTtl != null) {
+            store.put(key, entry, defaultTtl);
+        } else {
+            store.put(key, entry);
+        }
         listener.onCacheMiss(request, response);
 
         return response;
@@ -80,17 +83,18 @@ public final class ExactCacheModule implements PipelineModule {
 
     /** Remove a specific entry — useful when the underlying data changes */
     public void invalidate(LlmRequest request) {
-        store.remove(CacheKey.from(request));
+        store.invalidate(CacheKey.from(request));
     }
 
     /** Remove all entries */
     public void invalidateAll() {
-        store.clear();
+        store.invalidateAll();
     }
 
     public long hits() { return hits.get(); }
     public long misses() { return misses.get(); }
     public int size() { return store.size(); }
+    public CacheStore store() { return store; }
 
     /** Hit rate as a value between 0.0 and 1.0 */
     public double hitRate() {

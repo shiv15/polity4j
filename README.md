@@ -145,8 +145,8 @@ LlmPipeline pipeline = LlmPipeline.builder(primaryClient)
     .with(new PromptOptimizerModule(PromptOptimizerConfig.DEFAULT))
     // 2. Cost: Route simple requests to Claude Haiku
     .with(new ModelRouterModule(routingPolicy))
-    // 3. Cost: Short-circuit identical requests
-    .with(new ExactCacheModule())
+    // 3. Cost: Short-circuit identical requests with Caffeine size-bounding & TTL
+    .with(new ExactCacheModule(CaffeineCacheStore.withTtlAndMaxSize(Duration.ofHours(1), 10_000)))
     // 4. Reliability: Retry transient API rate limits
     .with(new RetryModule(RetryConfig.DEFAULT))
     // 5. Reliability: Block outbound calls if provider remains offline

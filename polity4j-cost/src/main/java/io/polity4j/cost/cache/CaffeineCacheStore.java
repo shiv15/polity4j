@@ -2,50 +2,72 @@ package io.polity4j.cost.cache;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Expiry;
 
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Production-grade CacheStore backed by Caffeine.
+ * Production-grade CacheStore backed by Caffeine with support for global and per-entry TTL expiration.
  */
 public final class CaffeineCacheStore implements CacheStore {
 
-    private final Cache<CacheKey, CacheEntry> caffeineCache;
+    private record CaffeineHolder(CacheEntry entry, Duration customTtl) {}
+
+    private final Cache<CacheKey, CaffeineHolder> caffeineCache;
+    private final Duration defaultTtl;
 
     public CaffeineCacheStore() {
-        this(Caffeine.newBuilder().maximumSize(10_000).build());
+        this(null, 10_000);
     }
 
-    public CaffeineCacheStore(Cache<CacheKey, CacheEntry> caffeineCache) {
-        this.caffeineCache = Objects.requireNonNull(caffeineCache, "caffeineCache must not be null");
+    public CaffeineCacheStore(Duration defaultTtl, long maxSize) {
+        var builder = Caffeine.newBuilder()
+                .maximumSize(maxSize)
+                .expireAfter(new Expiry<CacheKey, CaffeineHolder>() {
+                    @Override
+                    public long expireAfterCreate(CacheKey key, CaffeineHolder value, long currentTime) {
+                        Duration ttlToUse = value.customTtl() != null ? value.customTtl() : defaultTtl;
+                        return ttlToUse != null ? ttlToUse.toNanos() : Long.MAX_VALUE;
+                    }
+
+                    @Override
+                    public long expireAfterUpdate(CacheKey key, CaffeineHolder value, long currentTime, long currentDuration) {
+                        Duration ttlToUse = value.customTtl() != null ? value.customTtl() : defaultTtl;
+                        return ttlToUse != null ? ttlToUse.toNanos() : currentDuration;
+                    }
+
+                    @Override
+                    public long expireAfterRead(CacheKey key, CaffeineHolder value, long currentTime, long currentDuration) {
+                        return currentDuration;
+                    }
+                });
+        this.caffeineCache = builder.build();
+        this.defaultTtl = defaultTtl;
     }
 
     public static CaffeineCacheStore withTtlAndMaxSize(Duration ttl, long maxSize) {
-        var builder = Caffeine.newBuilder().maximumSize(maxSize);
-        if (ttl != null) {
-            builder.expireAfterWrite(ttl);
-        }
-        return new CaffeineCacheStore(builder.build());
+        return new CaffeineCacheStore(ttl, maxSize);
     }
 
     @Override
     public Optional<CacheEntry> get(CacheKey key) {
         Objects.requireNonNull(key, "key must not be null");
-        return Optional.ofNullable(caffeineCache.getIfPresent(key));
+        CaffeineHolder holder = caffeineCache.getIfPresent(key);
+        return holder != null ? Optional.of(holder.entry()) : Optional.empty();
     }
 
     @Override
     public void put(CacheKey key, CacheEntry entry) {
-        Objects.requireNonNull(key, "key must not be null");
-        Objects.requireNonNull(entry, "entry must not be null");
-        caffeineCache.put(key, entry);
+        put(key, entry, null);
     }
 
     @Override
     public void put(CacheKey key, CacheEntry entry, Duration ttl) {
-        put(key, entry);
+        Objects.requireNonNull(key, "key must not be null");
+        Objects.requireNonNull(entry, "entry must not be null");
+        caffeineCache.put(key, new CaffeineHolder(entry, ttl));
     }
 
     @Override
@@ -64,5 +86,9 @@ public final class CaffeineCacheStore implements CacheStore {
     public int size() {
         caffeineCache.cleanUp();
         return (int) caffeineCache.estimatedSize();
+    }
+
+    public Duration defaultTtl() {
+        return defaultTtl;
     }
 }

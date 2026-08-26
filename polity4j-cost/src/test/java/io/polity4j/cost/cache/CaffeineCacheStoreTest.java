@@ -26,4 +26,21 @@ class CaffeineCacheStoreTest {
         store.invalidate(key);
         assertThat(store.get(key)).isEmpty();
     }
+
+    @Test
+    void testPerEntryCustomTtlExpiration() throws InterruptedException {
+        // Store created with no global TTL
+        CaffeineCacheStore store = new CaffeineCacheStore();
+        LlmRequest request = LlmRequest.builder("Per Entry Test", "gpt-4o").build();
+        CacheKey key = CacheKey.from(request);
+        CacheEntry entry = CacheEntry.of(LlmResponse.builder("Response", "gpt-4o", "mock").build());
+
+        // Put entry with custom 50ms TTL
+        store.put(key, entry, Duration.ofMillis(50));
+        assertThat(store.get(key)).isPresent();
+
+        // Wait for TTL to expire
+        Thread.sleep(80);
+        assertThat(store.get(key)).isEmpty();
+    }
 }

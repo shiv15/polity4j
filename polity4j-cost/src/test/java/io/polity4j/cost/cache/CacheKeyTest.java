@@ -104,6 +104,17 @@ class CacheKeyTest {
     }
 
     @Test
+    void differentSystemPromptProducesDifferentKey() {
+        var request1 = LlmRequest.builder("Hello", "gpt-4o")
+                .systemPrompt("You are helpful assistant.").build();
+        var request2 = LlmRequest.builder("Hello", "gpt-4o")
+                .systemPrompt("You are concise code bot.").build();
+
+        assertThat(CacheKey.from(request1))
+                .isNotEqualTo(CacheKey.from(request2));
+    }
+
+    @Test
     void keyValueIsSha256HexString() {
         var request = LlmRequest.builder("Hello", "gpt-4o").build();
         String value = CacheKey.from(request).value();

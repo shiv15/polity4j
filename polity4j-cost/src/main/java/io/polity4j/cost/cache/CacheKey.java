@@ -40,6 +40,10 @@ public final class CacheKey {
         raw.append('\0');
         raw.append(request.prompt());
         raw.append('\0');
+        if (request.systemPrompt() != null) {
+            raw.append(request.systemPrompt());
+            raw.append('\0');
+        }
 
         // Serialize history deterministically
         // format: role:content\0 per message

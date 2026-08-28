@@ -7,3 +7,5 @@ target/
 .idea/
 *.iml
 .DS_Store
+scratch/
+/scratch/

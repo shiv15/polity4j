@@ -53,6 +53,11 @@
                 <artifactId>polity4j-integrations-micrometer</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>io.polity4j</groupId>
+                <artifactId>polity4j-integrations-opentelemetry</artifactId>
+                <version>${project.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 

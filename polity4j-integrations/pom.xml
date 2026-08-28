@@ -17,5 +17,6 @@
     <modules>
         <module>polity4j-integrations-spring-boot3</module>
         <module>polity4j-integrations-micrometer</module>
+        <module>polity4j-integrations-opentelemetry</module>
     </modules>
 </project>

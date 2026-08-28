@@ -290,6 +290,26 @@ suspend fun ask(request: LlmRequest): LlmResponse = withContext(Dispatchers.IO) 
 
 ---
 
+## OpenTelemetry Distributed Tracing
+
+Emit native OpenTelemetry spans with official GenAI Semantic Conventions for Jaeger, Zipkin, Datadog, or Grafana Tempo:
+
+```java
+// 1. Initialize OpenTelemetryTracingModule with your Tracer
+OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(tracer);
+
+// 2. Add to LlmPipeline
+LlmPipeline pipeline = LlmPipeline.builder(client)
+    .with(tracingModule)
+    .build();
+
+// Spans are created automatically with gen_ai.system, gen_ai.request.model,
+// gen_ai.usage.input_tokens, gen_ai.usage.output_tokens, and polity.caller_id!
+LlmResponse response = pipeline.execute(request);
+```
+
+---
+
 ## Running Examples
 
 To run the live reliability demo using the Anthropic API:

@@ -13,15 +13,19 @@ public final class AgentLoopConfig {
     private final Integer maxRequestsPerSession;
     private final Long slidingWindowMs;
     private final Integer maxConsecutiveDuplicates;
+    private final Integer stagnationLimit;
     private final Integer maxIterations;
     private final BigDecimal maxCost;
+    private final boolean resultAwareStagnation;
 
     private AgentLoopConfig(Builder builder) {
         this.maxRequestsPerSession = builder.maxRequestsPerSession;
         this.slidingWindowMs = builder.slidingWindowMs;
         this.maxConsecutiveDuplicates = builder.maxConsecutiveDuplicates;
+        this.stagnationLimit = builder.stagnationLimit;
         this.maxIterations = builder.maxIterations;
         this.maxCost = builder.maxCost;
+        this.resultAwareStagnation = builder.resultAwareStagnation;
     }
 
     public Integer maxRequestsPerSession() {
@@ -36,12 +40,20 @@ public final class AgentLoopConfig {
         return maxConsecutiveDuplicates;
     }
 
+    public Integer stagnationLimit() {
+        return stagnationLimit;
+    }
+
     public Integer maxIterations() {
         return maxIterations;
     }
 
     public BigDecimal maxCost() {
         return maxCost;
+    }
+
+    public boolean resultAwareStagnation() {
+        return resultAwareStagnation;
     }
 
     public static Builder builder() {
@@ -56,8 +68,10 @@ public final class AgentLoopConfig {
         private Integer maxRequestsPerSession = 10;
         private Long slidingWindowMs = 60_000L; // 1 minute
         private Integer maxConsecutiveDuplicates = 3;
+        private Integer stagnationLimit = 4;
         private Integer maxIterations = 10;
         private BigDecimal maxCost = null;
+        private boolean resultAwareStagnation = true;
 
         public Builder maxRequestsPerSession(Integer maxRequestsPerSession) {
             if (maxRequestsPerSession != null && maxRequestsPerSession <= 0) {
@@ -80,6 +94,23 @@ public final class AgentLoopConfig {
                 throw new IllegalArgumentException("maxConsecutiveDuplicates must be greater than 0");
             }
             this.maxConsecutiveDuplicates = maxConsecutiveDuplicates;
+            if (maxConsecutiveDuplicates != null) {
+                this.stagnationLimit = maxConsecutiveDuplicates + 1;
+            }
+            return this;
+        }
+
+        public Builder stagnationLimit(int stagnationLimit) {
+            if (stagnationLimit < 2) {
+                throw new IllegalArgumentException("stagnationLimit must be at least 2");
+            }
+            this.stagnationLimit = stagnationLimit;
+            this.maxConsecutiveDuplicates = stagnationLimit - 1;
+            return this;
+        }
+
+        public Builder resultAwareStagnation(boolean resultAwareStagnation) {
+            this.resultAwareStagnation = resultAwareStagnation;
             return this;
         }
 
@@ -110,6 +141,7 @@ public final class AgentLoopConfig {
         public AgentLoopConfig build() {
             if (maxRequestsPerSession == null
                     && maxConsecutiveDuplicates == null
+                    && stagnationLimit == null
                     && maxIterations == null
                     && maxCost == null) {
                 throw new IllegalStateException("at least one trip condition must be configured");

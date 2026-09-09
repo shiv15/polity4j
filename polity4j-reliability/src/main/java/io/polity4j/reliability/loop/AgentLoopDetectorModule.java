@@ -63,21 +63,7 @@ public final class AgentLoopDetectorModule implements PipelineModule {
         long now = clock.getAsLong();
         SessionState state = states.computeIfAbsent(callerId, k -> new SessionState());
 
-        // 1. Stagnation check — consecutive duplicates
-        if (config.maxConsecutiveDuplicates() != null) {
-            int consecutive = state.recordPrompt(request.prompt());
-            if (consecutive > config.maxConsecutiveDuplicates()) {
-                throw new AgentLoopException(
-                        String.format("Agent loop detected: caller '%s' submitted duplicate prompt consecutively %d times, exceeding limit of %d",
-                                      callerId, consecutive, config.maxConsecutiveDuplicates()),
-                        AgentLoopException.TripReason.STAGNATION_DETECTED,
-                        state.totalIterations(),
-                        state.accumulatedCost()
-                );
-            }
-        }
-
-        // 2. Frequency check — sliding window limit
+        // 1. Frequency check — sliding window limit
         if (config.maxRequestsPerSession() != null && config.slidingWindowMs() != null) {
             int count = state.recordRequestTimestamp(now, config.slidingWindowMs());
             if (count > config.maxRequestsPerSession()) {
@@ -91,7 +77,7 @@ public final class AgentLoopDetectorModule implements PipelineModule {
             }
         }
 
-        // 3. Cost check — accumulated cost limit
+        // 2. Cost check — accumulated cost limit
         if (config.maxCost() != null) {
             if (state.accumulatedCost().compareTo(config.maxCost()) >= 0) {
                 throw new AgentLoopException(
@@ -104,7 +90,7 @@ public final class AgentLoopDetectorModule implements PipelineModule {
             }
         }
 
-        // 4. Iteration check — hard iteration cap
+        // 3. Iteration check — hard iteration cap
         int currentIteration = state.incrementIterations();
         if (config.maxIterations() != null && currentIteration > config.maxIterations()) {
             throw new AgentLoopException(
@@ -116,12 +102,35 @@ public final class AgentLoopDetectorModule implements PipelineModule {
             );
         }
 
-        // All checks passed — proceed with call
+        // All pre-checks passed — proceed with call
         LlmResponse response = next.proceed(request);
 
         // Record cost if present
         if (response.estimatedCost() != null) {
             state.addCost(response.estimatedCost());
+        }
+
+        // 4. Stagnation check — consecutive duplicates (post-call to inspect result)
+        Integer stagnationLimit = config.stagnationLimit() != null
+                ? config.stagnationLimit()
+                : (config.maxConsecutiveDuplicates() != null ? config.maxConsecutiveDuplicates() + 1 : null);
+
+        if (stagnationLimit != null) {
+            int consecutive = state.recordInteraction(
+                    request.prompt(),
+                    response.content(),
+                    config.resultAwareStagnation()
+            );
+            int dupLimit = config.maxConsecutiveDuplicates() != null ? config.maxConsecutiveDuplicates() : (stagnationLimit - 1);
+            if (consecutive >= stagnationLimit) {
+                throw new AgentLoopException(
+                        String.format("Agent loop detected: caller '%s' submitted duplicate prompt consecutively %d times, exceeding limit of %d",
+                                      callerId, consecutive, dupLimit),
+                        AgentLoopException.TripReason.STAGNATION_DETECTED,
+                        state.totalIterations(),
+                        state.accumulatedCost()
+                );
+            }
         }
 
         return response;
@@ -145,19 +154,39 @@ public final class AgentLoopDetectorModule implements PipelineModule {
         private final List<Long> requestTimestamps = new ArrayList<>();
         private int totalIterations = 0;
         private BigDecimal accumulatedCost = BigDecimal.ZERO;
-        private int consecutiveDuplicates = 0;
+        private int consecutiveStagnantCalls = 0;
         private String lastPrompt = null;
+        private String lastResult = null;
 
         private SessionState() {}
 
-        synchronized int recordPrompt(String prompt) {
-            if (prompt.equals(lastPrompt)) {
-                consecutiveDuplicates++;
+        public synchronized int recordInteraction(String prompt, String result, boolean resultAware) {
+            boolean promptIdentical = prompt != null && prompt.equals(lastPrompt);
+            lastPrompt = prompt;
+
+            boolean stagnant;
+            if (resultAware) {
+                boolean resultIdentical = result != null && result.equals(lastResult);
+                stagnant = promptIdentical && resultIdentical;
             } else {
-                lastPrompt = prompt;
-                consecutiveDuplicates = 1;
+                stagnant = promptIdentical;
             }
-            return consecutiveDuplicates;
+            lastResult = result;
+
+            if (stagnant) {
+                consecutiveStagnantCalls++;
+            } else {
+                consecutiveStagnantCalls = 1;
+            }
+            return consecutiveStagnantCalls;
+        }
+
+        public synchronized int recordPrompt(String prompt) {
+            return recordInteraction(prompt, null, false);
+        }
+
+        public synchronized int consecutiveStagnantCalls() {
+            return consecutiveStagnantCalls;
         }
 
         synchronized int incrementIterations() {
@@ -188,8 +217,9 @@ public final class AgentLoopDetectorModule implements PipelineModule {
         public synchronized void reset() {
             totalIterations = 0;
             accumulatedCost = BigDecimal.ZERO;
-            consecutiveDuplicates = 0;
+            consecutiveStagnantCalls = 0;
             lastPrompt = null;
+            lastResult = null;
             requestTimestamps.clear();
         }
     }
